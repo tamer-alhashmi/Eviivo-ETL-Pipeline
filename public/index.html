@@ -1,0 +1,1816 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eviivo Executive & Operations Portal</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: { colors: { brand: { 50: '#f0fdf4', 500: '#10b981', 600: '#059669', 700: '#047857' } } } }
+    }
+    if (localStorage.getItem('eviivo-theme') === 'light') document.documentElement.classList.add('light-mode');
+  </script>
+
+  <style>
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0b0f19; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+    
+    .cal-grid-col { min-width: 130px; max-width: 130px; }
+    .calendar-pan-surface { cursor: grab; user-select: none; }
+    .calendar-pan-surface.is-dragging { cursor: grabbing; }
+    .calendar-booking { z-index: 20; pointer-events: auto; }
+    .calendar-booking.is-overlap { z-index: 30; }
+    .calendar-scroll-shell { max-height: calc(100vh - 12rem); overflow: auto; }
+    .calendar-header-row { position: sticky; top: 0; z-index: 35; }
+    .calendar-header-room { position: sticky; left: 0; z-index: 45; background: #020617; }
+    .calendar-header-date { position: relative; z-index: 40; background: #020617; }
+    .calendar-room-cell { position: sticky; left: 0; z-index: 25; }
+    .calendar-room-cell-even { background: rgba(15, 23, 42, 0.96); }
+    .calendar-room-cell-odd { background: rgba(15, 23, 42, 1); }
+    .table-row-hover:hover { background-color: rgba(30, 41, 59, 0.7); cursor: pointer; }
+    
+    /* Overbooking Stripes & Hover Effects */
+    .bg-striped { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.1) 0px, rgba(255,255,255,0.1) 8px, transparent 8px, transparent 16px); }
+    .hover-lift { transition: transform 0.2s ease, z-index 0s; }
+    .hover-lift:hover { transform: translateY(-4px) scale(1.02); z-index: 40 !important; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5); }
+
+    /* Custom Tooltip for Notes in Calendar/Unpaid */
+    .note-tooltip-container .note-tooltip {
+      visibility: hidden; opacity: 0; transition: opacity 0.2s;
+      position: absolute; bottom: 125%; left: 50%; transform: translateX(-50%);
+      white-space: normal; z-index: 50; width: max-content; max-width: 250px;
+    }
+    .note-tooltip-container:hover .note-tooltip { visibility: visible; opacity: 1; }
+
+    /* Sliding Panels for Multi-Edit (Relocation) */
+    .panels-wrapper { display: flex; flex-direction: row-reverse; gap: 1rem; padding: 1rem; align-items: flex-start; overflow-x: auto; }
+    .edit-panel { width: 500px; max-width: 90vw; flex-shrink: 0; max-height: calc(100vh - 2rem); display: flex; flex-direction: column; animation: slideIn 0.3s ease-out; }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    /* Print & Screenshot Constraints */
+    @media print {
+      body * { visibility: hidden; }
+      .print-area, .print-area * { visibility: visible; }
+      .print-area { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; }
+      .no-print { display: none !important; }
+    }
+    /* .hide-on-screenshot { display: none !important; } */
+    
+    /* Compact Table for Handover Screenshots */
+    .table-compact th, .table-compact td { padding: 0.35rem 0.5rem; line-height: 1.2; }
+    .ops-note-cell { min-width: 190px; width: 220px; max-width: 260px; white-space: normal; overflow-wrap: anywhere; }
+    .ops-note-pill { display: -webkit-box; max-width: 100%; max-height: 2.5em; padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-size: 8px; line-height: 1.25; font-weight: 700; white-space: normal; overflow: hidden; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+    .ops-contact-cell { min-width: 145px; max-width: 175px; line-height: 1.25; vertical-align: middle; }
+    .ops-contact-cell > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Global activity signal for network-backed views. */
+    #system-activity-rail { position: fixed; inset: 0 0 auto; height: 3px; z-index: 100; pointer-events: none; opacity: 0; transition: opacity 0.2s ease; overflow: hidden; }
+    #system-activity-rail::after { content: ''; display: block; width: 42%; height: 100%; background: linear-gradient(90deg, transparent, #34d399, #38bdf8, transparent); animation: activitySweep 1.1s ease-in-out infinite; }
+    #system-activity-rail.is-active { opacity: 1; }
+    #system-activity-chip { position: fixed; right: 1rem; bottom: 1rem; z-index: 90; display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0.75rem; border: 1px solid rgba(52, 211, 153, 0.3); border-radius: 0.65rem; background: rgba(15, 23, 42, 0.94); color: #cbd5e1; font-size: 0.7rem; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25); opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity 0.2s ease, transform 0.2s ease; }
+    #system-activity-chip.is-visible { opacity: 1; transform: translateY(0); }
+    .activity-orbit { width: 0.8rem; height: 0.8rem; border: 2px solid #334155; border-top-color: #34d399; border-radius: 999px; animation: activitySpin 0.75s linear infinite; }
+    @keyframes activitySweep { from { transform: translateX(-120%); } to { transform: translateX(280%); } }
+    @keyframes activitySpin { to { transform: rotate(360deg); } }
+    .light-mode #system-activity-chip { background: rgba(255, 255, 255, 0.96); border-color: #a7f3d0; color: #334155; }
+
+    /* Light theme keeps the existing information hierarchy while improving contrast. */
+    .light-mode body { background: #f1f5f9; color: #0f172a; }
+    .light-mode .bg-slate-950 { background-color: #e2e8f0; }
+    .light-mode .bg-slate-900, .light-mode .bg-slate-900\/90 { background-color: #ffffff; }
+    .light-mode .bg-slate-900\/40 { background-color: #f8fafc; }
+    .light-mode .bg-slate-900\/80 { background-color: #f1f5f9; }
+    .light-mode .bg-slate-950\/50 { background-color: #f8fafc; }
+    .light-mode .border-slate-800, .light-mode .border-slate-800\/60 { border-color: #cbd5e1; }
+    .light-mode .border-slate-700, .light-mode .border-slate-700\/50 { border-color: #94a3b8; }
+    .light-mode .text-white { color: #0f172a; }
+    .light-mode .text-slate-100, .light-mode .text-slate-200, .light-mode .text-slate-300 { color: #334155; }
+    .light-mode .text-slate-400, .light-mode .text-slate-500 { color: #64748b; }
+    .light-mode .text-slate-600 { color: #94a3b8; }
+    .light-mode .placeholder-slate-500::placeholder { color: #64748b; }
+    .light-mode .divide-slate-800 > :not([hidden]) ~ :not([hidden]) { border-color: #e2e8f0; }
+    .light-mode .hover\:bg-slate-800:hover, .light-mode .table-row-hover:hover { background-color: #e2e8f0; }
+    .light-mode input, .light-mode select, .light-mode textarea { color-scheme: light; }
+    .light-mode .bg\-\[\#121826\] { background-color: #ffffff; }
+    .light-mode .bg\-\[\#0f172a\] { background-color: #f8fafc; }
+    .light-mode .text\-\[\#e2e8f0\] { color: #334155; }
+    .light-mode .text\-\[\#cbd5e1\] { color: #475569; }
+    .light-mode .border\-\[\#2b3548\], .light-mode .border\-\[\#1e293b\] { border-color: #cbd5e1; }
+    .task-shell { background: linear-gradient(145deg, rgba(15,23,42,.98), rgba(8,47,73,.72)); border: 1px solid rgba(45,212,191,.22); border-radius: 1rem; box-shadow: 0 18px 50px rgba(2,8,23,.28); }
+    .task-card { background: rgba(15,23,42,.82); border: 1px solid rgba(148,163,184,.14); border-radius: .85rem; box-shadow: 0 10px 28px rgba(2,8,23,.18); }
+    .task-action { transition: transform .18s ease, box-shadow .18s ease, background-color .18s ease; }
+    .task-action:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(2,8,23,.28); }
+    .task-mapping-table th { letter-spacing: .08em; font-size: .65rem; }
+    .task-mapping-table tbody tr { background: rgba(2,6,23,.18); }
+    .task-mapping-table tbody tr:hover { background: rgba(20,184,166,.08); }
+    .task-preview-shell { min-height: 18rem; background: rgba(2,6,23,.3); }
+    .light-mode .task-shell { background: linear-gradient(145deg, #ffffff, #ecfeff); border-color: #99f6e4; }
+    .light-mode .task-card { background: rgba(255,255,255,.9); border-color: #cbd5e1; }
+  </style>
+</head>
+
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-emerald-500 selection:text-white relative">
+  <div id="system-activity-rail" aria-hidden="true"></div>
+  <div id="system-activity-chip" role="status" aria-live="polite"><span class="activity-orbit"></span><span id="system-activity-label">Updating workspace...</span></div>
+
+  <!-- ===================================================================== -->
+  <!-- [SECTION-01]: FULL-WIDTH APP BAR & GLOBAL NAVIGATION                  -->
+  <!-- ===================================================================== -->
+  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur-md sticky top-0 z-40 px-4 py-3 no-print">
+    <div class="w-full flex flex-wrap items-center justify-between gap-3">
+      
+      <div class="flex items-center gap-3 w-full md:w-auto">
+        <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center shadow-lg shrink-0">
+          <i class="fa-solid fa-hotel text-white text-base"></i>
+        </div>
+        <div class="hidden md:block">
+          <h1 class="font-bold text-sm leading-tight text-white">Eviivo Operations</h1>
+          <p class="text-[10px] text-slate-400">Portfolio & Receivables</p>
+        </div>
+
+        <!-- Global Search Bar -->
+        <div class="relative ml-2 flex-1 md:w-72">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-2 text-slate-400 text-xs"></i>
+          <input type="text" id="global-booking-search" oninput="debounceGlobalSearch()" placeholder="Search guests, refs (e.g. John Doe or Doe John)..." 
+            class="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-lg pl-8 pr-8 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none transition">
+          <button id="clear-search-btn" onclick="clearGlobalSearch()" class="hidden absolute right-2 top-1.5 text-slate-400 hover:text-white text-xs"><i class="fa-solid fa-circle-xmark"></i></button>
+          <div id="search-dropdown-results" class="absolute left-0 right-0 top-full mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 max-h-96 overflow-y-auto hidden divide-y divide-slate-800"></div>
+        </div>
+      </div>
+
+      <nav class="flex items-center gap-1 bg-slate-950 border border-slate-800 p-1 rounded-lg text-xs font-medium overflow-x-auto">
+        <button id="tab-btn-analytics" onclick="switchTab('analytics')" class="px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition whitespace-nowrap"><i class="fa-solid fa-chart-pie mr-1"></i> Overview</button>
+        <button id="tab-btn-unpaid" onclick="switchTab('unpaid')" class="px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition whitespace-nowrap"><i class="fa-solid fa-hand-holding-dollar mr-1 text-amber-400"></i> Unpaid</button>
+        <button id="tab-btn-ops" onclick="switchTab('ops')" class="px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition whitespace-nowrap"><i class="fa-solid fa-bell-concierge mr-1"></i> Daily Handover</button>
+        <button id="tab-btn-calendar" onclick="switchTab('calendar')" class="px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition whitespace-nowrap"><i class="fa-solid fa-calendar-days mr-1 text-indigo-400"></i> Calendar</button>
+        <button id="tab-btn-ai-reports" onclick="switchTab('ai-reports')" class="px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition whitespace-nowrap"><i class="fa-solid fa-wand-magic-sparkles mr-1 text-cyan-300"></i> AI Reports</button>
+        <button id="tab-btn-daily-tasks" onclick="switchTab('daily-tasks')" class="px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition whitespace-nowrap"><i class="fa-solid fa-arrows-rotate mr-1 text-emerald-300"></i> Daily Tasks</button>
+      </nav>
+
+      <div class="flex items-center gap-2">
+        <button id="theme-toggle-btn" onclick="toggleTheme()" class="w-8 h-8 inline-flex items-center justify-center text-xs rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition" title="Switch to light mode" aria-label="Switch color theme">
+          <i id="theme-toggle-icon" class="fa-solid fa-sun text-amber-300"></i>
+        </button>
+        <button id="global-refresh-btn" onclick="triggerFullSystemRefresh()" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition flex items-center gap-1.5 shadow-sm active:scale-95" title="Refresh All Data">
+          <i id="global-refresh-icon" class="fa-solid fa-rotate text-emerald-400"></i><span class="hidden md:inline">Refresh</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===================================================================== -->
+  <!-- [SECTION-02]: FULL-WIDTH MAIN APP CONTAINER                           -->
+  <!-- ===================================================================== -->
+  <main class="w-full px-4 py-5 space-y-5 no-print">
+
+    <!-- TAB 1: EXECUTIVE ANALYTICS -->
+    <div id="tab-content-analytics" class="space-y-5 hidden">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <span class="p-2 rounded-lg bg-slate-950 border border-slate-800 text-emerald-400"><i class="fa-solid fa-sliders"></i></span>
+          <div><div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Scope & Period</div><div class="text-xs font-semibold text-white">Filter Portfolio & Date Interval</div></div>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+          <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Property:</label><select id="kpi-property" onchange="loadAllAnalytics()" class="bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-2 py-1.5 focus:outline-none min-w-[150px]"><option value="ALL">All Properties</option></select></div>
+          <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">From Date:</label><input type="date" id="kpi-from-date" onchange="loadAllAnalytics()" class="bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-2 py-1.5 focus:outline-none" /></div>
+          <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">To Date:</label><input type="date" id="kpi-to-date" onchange="loadAllAnalytics()" class="bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-2 py-1.5 focus:outline-none" /></div>
+          <div class="pt-4"><button onclick="clearOverviewDates()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg border border-slate-700 transition">Clear Dates</button></div>
+        </div>
+      </div>
+      
+      <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm"><div class="flex items-center justify-between text-slate-400 text-[11px] font-bold uppercase"><span>Gross Booked</span><i class="fa-solid fa-file-invoice-dollar text-slate-500"></i></div><div class="mt-1.5 text-xl font-bold text-white" id="kpi-gross">£0.00</div><div class="mt-1 text-[10px] text-slate-400" id="kpi-bookings-count">0 bookings</div></div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm"><div class="flex items-center justify-between text-emerald-400 text-[11px] font-bold uppercase"><span>Collected Rev</span><i class="fa-solid fa-circle-check text-emerald-500"></i></div><div class="mt-1.5 text-xl font-bold text-emerald-400" id="kpi-collected">£0.00</div><div class="mt-1 text-[10px] text-emerald-500/80" id="kpi-collection-rate">0% settlement</div></div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm"><div class="flex items-center justify-between text-amber-400 text-[11px] font-bold uppercase"><span>Total Unpaid</span><i class="fa-solid fa-triangle-exclamation text-amber-500"></i></div><div class="mt-1.5 text-xl font-bold text-amber-400" id="kpi-outstanding">£0.00</div><div class="mt-1 text-[10px] text-amber-400/80" id="kpi-unpaid-stats">0 pending / partial</div></div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm"><div class="flex items-center justify-between text-indigo-400 text-[11px] font-bold uppercase"><span>Fully Settled</span><i class="fa-solid fa-shield-halved text-indigo-500"></i></div><div class="mt-1.5 text-xl font-bold text-indigo-400" id="kpi-settled-count">0</div><div class="mt-1 text-[10px] text-indigo-400/80">Reconciled Bookings</div></div>
+      </section>
+
+      <section class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg"><h2 class="text-xs font-bold text-slate-200 uppercase tracking-wide">Revenue vs Collections vs Unpaid (£)</h2><div class="h-56 mt-2"><canvas id="monthlyChart"></canvas></div></div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg flex flex-col justify-between"><h2 class="text-xs font-bold text-slate-200 uppercase tracking-wide mb-1">Channel Distribution</h2><div class="h-48 mt-2 w-full"><canvas id="channelChart"></canvas></div></div>
+      </section>
+
+      <section class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg w-full">
+        <div class="p-3 border-b border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <h2 class="text-xs font-bold text-white uppercase tracking-wide"><i class="fa-solid fa-book-journal-whills mr-1"></i> Reconciliation Ledger</h2>
+          <div class="flex flex-wrap items-center gap-2">
+            <input type="text" id="filter-search" placeholder="Search ref or guest..." oninput="debounceSearch()" class="px-3 py-1 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none w-48">
+            <select id="filter-status" onchange="fetchReconciliation(0)" class="px-2.5 py-1 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none">
+              <option value="ALL">All Statuses</option><option value="Fully Paid">Fully Paid</option><option value="Partially Paid">Partially Paid</option><option value="Unpaid">Unpaid</option>
+            </select>
+            <select id="recon-name-sort" onchange="fetchReconciliation(0)" title="Sort Guest column" class="px-2.5 py-1 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none">
+              <option value="name_asc">Guest A-Z</option><option value="name_desc">Guest Z-A</option>
+            </select>
+            <label class="flex items-center gap-1 text-[10px] text-slate-300 whitespace-nowrap" title="Hide rows where Paid is zero"><input type="checkbox" id="recon-hide-zero-paid" onchange="fetchReconciliation(0)" class="accent-emerald-500"> Hide zero Paid</label>
+            <label class="flex items-center gap-1 text-[10px] text-slate-300 whitespace-nowrap" title="Hide rows with no note"><input type="checkbox" id="recon-hide-blank-notes" onchange="fetchReconciliation(0)" class="accent-amber-500"> Hide blank Notes</label>
+          </div>
+        </div>
+        <div class="overflow-x-auto w-full">
+          <table class="w-full text-left text-[11px] text-slate-300 table-compact">
+            <thead class="bg-slate-950 text-slate-400 font-semibold border-b border-slate-800 uppercase tracking-wide">
+              <tr><th>Property</th><th>Booking Ref</th><th>Guest</th><th>Check-In</th><th class="text-right">Booked</th><th class="text-right">Paid</th><th class="text-right">Balance Due</th><th class="text-center">Status</th></tr>
+            </thead>
+            <tbody id="recon-tbody" class="divide-y divide-slate-800/60"></tbody>
+          </table>
+        </div>
+        <div class="p-2 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
+          <span id="pagination-info">0 records</span>
+          <div class="flex gap-2"><button id="btn-prev" onclick="changePage(-1)" class="px-2 py-0.5 bg-slate-800 rounded border border-slate-700">Prev</button><button id="btn-next" onclick="changePage(1)" class="px-2 py-0.5 bg-slate-800 rounded border border-slate-700">Next</button></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- TAB 2: AI REPORTS -->
+    <div id="tab-content-ai-reports" class="hidden space-y-5">
+      <section class="bg-slate-900 border border-cyan-500/20 rounded-xl p-4 shadow-xl">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div><div class="text-[10px] font-bold text-cyan-300 uppercase tracking-wider">AI Reports Studio</div><h2 class="text-lg font-bold text-white mt-1">Ask the portfolio ledger a question</h2><p class="text-[11px] text-slate-400 mt-1">Read-only PostgreSQL reports with an auditable financial brief.</p></div>
+          <div class="flex flex-wrap items-end gap-2">
+            <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Hotel</label><select id="ai-report-property" class="bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-2 py-1.5 min-w-[150px]"><option value="ALL">All Properties</option></select></div>
+            <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">From</label><input type="date" id="ai-report-from" class="bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-2 py-1.5"></div>
+            <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">To</label><input type="date" id="ai-report-to" class="bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-2 py-1.5"></div>
+            <button onclick="runAiReport()" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-lg"><i class="fa-solid fa-play mr-1"></i>Run Report</button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 mt-4 pt-3 border-t border-slate-800">
+          <button onclick="copyAiReportText()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs rounded-lg"><i class="fa-solid fa-copy mr-1 text-cyan-300"></i>Copy Text</button>
+          <button onclick="downloadAiReportPdf()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs rounded-lg"><i class="fa-solid fa-file-pdf mr-1 text-rose-300"></i>Download PDF</button>
+          <button onclick="sendAiReportEmail()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs rounded-lg"><i class="fa-solid fa-paper-plane mr-1 text-sky-300"></i>Send via Email</button>
+          <button onclick="saveAiSearch()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs rounded-lg"><i class="fa-solid fa-bookmark mr-1 text-amber-300"></i>Save Search</button>
+        </div>
+      </section>
+
+      <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-5 items-start">
+        <div class="space-y-5 min-w-0">
+          <section id="ai-report-brief" class="bg-slate-900 border border-amber-500/30 rounded-xl p-4"><div class="text-[10px] font-bold text-amber-300 uppercase tracking-wider"><i class="fa-solid fa-scale-balanced mr-1"></i>Financial & Analytical Brief</div><div id="ai-report-brief-body" class="text-xs text-slate-300 mt-2">No report dataset loaded.</div></section>
+          <section class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-4"><div class="flex items-center justify-between"><h3 class="text-xs font-bold text-slate-200 uppercase">Visual Analysis</h3><select id="ai-chart-type" onchange="renderAiChart()" class="bg-slate-950 border border-slate-700 text-slate-200 text-[10px] rounded px-2 py-1"><option value="bar">Bar</option><option value="pie">Pie</option></select></div><div class="h-56 mt-3"><canvas id="aiReportChart"></canvas></div></div>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4"><div class="text-[10px] font-bold text-cyan-300 uppercase">Dataset</div><div id="ai-report-title" class="text-base font-bold text-white mt-2">No report loaded</div><div id="ai-report-count" class="text-xs text-slate-400 mt-1">0 rows</div><div class="text-[10px] text-slate-500 mt-5">The grid and chart adapt to the returned dataset.</div></div>
+          </section>
+          <section class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-left text-[11px] table-compact"><thead id="ai-report-thead" class="bg-slate-950 text-slate-400 uppercase border-b border-slate-800"></thead><tbody id="ai-report-tbody" class="divide-y divide-slate-800 text-slate-300"></tbody></table></div></section>
+        </div>
+        <aside class="bg-slate-900 border border-cyan-500/30 rounded-xl overflow-hidden xl:sticky xl:top-24"><div class="p-4 border-b border-slate-800"><div class="flex items-center gap-2"><span class="w-8 h-8 rounded-lg bg-cyan-500/15 text-cyan-300 flex items-center justify-center"><i class="fa-solid fa-comments"></i></span><div><h3 class="text-sm font-bold text-white">AI Copilot</h3><p class="text-[10px] text-slate-400">Natural language to safe SQL</p></div></div></div><div id="ai-copilot-messages" class="p-3 space-y-2 min-h-[180px] max-h-[300px] overflow-y-auto"><div class="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-[11px] text-slate-300">Try “show daily sales” or “cash payments for this month”.</div></div><div class="p-3 border-t border-slate-800"><textarea id="ai-copilot-input" rows="3" placeholder="Ask for a report..." class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-white resize-none"></textarea><button onclick="askAiCopilot()" class="w-full mt-2 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-lg"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Ask Copilot</button></div></aside>
+      </div>
+    </div>
+
+    <!-- TAB 2: DAILY TASKS -->
+    <div id="tab-content-daily-tasks" class="hidden space-y-5">
+      <section class="task-shell p-5">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div><div class="text-[10px] font-bold text-emerald-300 uppercase tracking-wider"><i class="fa-solid fa-layer-group mr-1"></i>Daily automation workspace</div><h2 class="text-xl font-bold text-white mt-1">Prepare and sync operational sheets</h2><p class="text-[11px] text-slate-300/75 mt-1">Live PostgreSQL schema, reusable mappings, and duplicate-safe daily delivery.</p></div>
+          <div class="flex flex-wrap items-end gap-2">
+            <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Task</label><select id="task-type" onchange="loadTaskWorkspace()" class="bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-2 py-1.5 min-w-[150px]"><option value="in_out">In & Out</option><option value="cash">Cash</option><option value="card">Card</option></select></div>
+            <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Hotel</label><select id="task-property" onchange="previewTaskData()" class="bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-2 py-1.5 min-w-[150px]"><option value="ALL">All Properties</option></select></div>
+            <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Date</label><input type="date" id="task-date" onchange="previewTaskData()" class="bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-2 py-1.5"></div>
+            <button onclick="syncDailyTask()" class="task-action px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black rounded-lg"><i class="fa-solid fa-cloud-arrow-up mr-1"></i>Sync Now</button>
+          </div>
+        </div>
+        <div id="task-status" class="text-[10px] text-slate-300/75 mt-4 px-3 py-2 rounded-lg bg-slate-950/35 border border-white/5"></div>
+      </section>
+
+      <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-5 items-start">
+        <section class="task-card overflow-hidden">
+          <div class="p-5 border-b border-slate-700/50 flex flex-wrap items-center justify-between gap-3"><div><div class="text-[10px] font-bold text-cyan-300 uppercase tracking-wider">Mapping blueprint</div><h3 class="text-base font-bold text-white mt-1">Sheet columns to live database fields</h3><p class="text-[10px] text-slate-400 mt-1">The source selector is loaded from PostgreSQL information_schema.</p></div><button onclick="addTaskMappingRow()" class="task-action px-3 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-black rounded-lg"><i class="fa-solid fa-plus mr-1"></i>Add Column</button></div>
+          <div class="overflow-x-auto p-3"><table class="task-mapping-table w-full text-left text-[11px] table-compact"><thead class="text-slate-400 uppercase"><tr><th class="px-3 py-3">Google Sheets column</th><th class="px-3 py-3">Mapping mode</th><th class="px-3 py-3">PostgreSQL field / expression</th><th class="px-3 py-3 text-center">Upsert key</th><th></th></tr></thead><tbody id="task-mapping-body" class="divide-y divide-slate-700/50"></tbody></table></div>
+          <div class="p-5 border-t border-slate-700/50 flex flex-wrap items-center gap-2"><input id="task-preset-name" placeholder="Name this mapping preset" class="bg-slate-950/80 border border-slate-600 rounded-lg px-3 py-2 text-xs text-white min-w-[220px]"><button onclick="saveTaskPreset()" class="task-action px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-lg"><i class="fa-solid fa-floppy-disk mr-1"></i>Save Preset</button><select id="task-preset-select" onchange="loadSelectedTaskPreset()" class="bg-slate-950/80 border border-slate-600 rounded-lg px-3 py-2 text-xs text-white"><option value="">Saved presets</option></select></div>
+        </section>
+        <aside class="task-card overflow-hidden"><div class="p-5 border-b border-slate-700/50"><div class="text-[10px] font-bold text-amber-300 uppercase tracking-wider">Delivery preview</div><h3 class="text-base font-bold text-white mt-1">Destination rows</h3><p class="text-[10px] text-slate-400 mt-1">Preview uses the selected task, hotel, date, and mapping.</p></div><div id="task-preview" class="task-preview-shell max-h-[520px] overflow-auto p-3 text-[10px] text-slate-300">Loading live task schema...</div></aside>
+      </div>
+    </div>
+
+    <!-- TAB 2: UNPAID RESERVATIONS -->
+    <div id="tab-content-unpaid" class="hidden space-y-5">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl flex flex-wrap items-center justify-between gap-4">
+        <div class="flex flex-wrap items-center gap-3">
+          <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Property</label><select id="unpaid-filter-property" onchange="fetchUnpaidReservations(0)" class="bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-2 py-1.5 focus:outline-none min-w-[150px]"><option value="ALL">All Properties</option></select></div>
+          <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Check-in From</label><input type="date" id="unpaid-date-from" onchange="fetchUnpaidReservations(0)" class="bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-2 py-1.5 focus:outline-none" /></div>
+          <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Check-in To</label><input type="date" id="unpaid-date-to" onchange="fetchUnpaidReservations(0)" class="bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-2 py-1.5 focus:outline-none" /></div>
+          <div class="pt-4"><button onclick="clearUnpaidFilters()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg border border-slate-700 transition">Clear Dates</button></div>
+        </div>
+        <div class="flex items-center gap-3 pt-4 md:pt-0">
+          <input type="text" id="unpaid-search" placeholder="Search ref or guest..." oninput="debounceUnpaidSearch()" class="px-3 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none w-48">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm"><div class="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Total Outstanding</div><div id="unpaid-summary-outstanding" class="text-xl font-black text-amber-400 mt-1">£0.00</div></div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm"><div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Booked Volume</div><div id="unpaid-summary-booked" class="text-xl font-bold text-white mt-1">£0.00</div></div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm"><div class="text-[10px] font-bold text-sky-400 uppercase tracking-wider">Unpaid Folios Count</div><div id="unpaid-summary-count" class="text-xl font-bold text-sky-400 mt-1">0 Bookings</div></div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-xl shadow-xl overflow-hidden w-full">
+        <div class="p-3 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
+          <h3 class="text-xs font-bold text-amber-400 uppercase tracking-wide"><i class="fa-solid fa-circle-exclamation mr-1"></i> Outstanding Folios</h3>
+          <div class="flex flex-wrap items-center gap-2">
+            <select id="unpaid-name-sort" onchange="fetchUnpaidReservations(0)" title="Sort Guest column" class="px-2.5 py-1 text-[10px] bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none"><option value="name_asc">Guest A-Z</option><option value="name_desc">Guest Z-A</option></select>
+            <label class="flex items-center gap-1 text-[10px] text-slate-300 whitespace-nowrap" title="Hide rows where Paid is zero"><input type="checkbox" id="unpaid-hide-zero-paid" onchange="fetchUnpaidReservations(0)" class="accent-emerald-500"> Hide zero Paid</label>
+            <label class="flex items-center gap-1 text-[10px] text-slate-300 whitespace-nowrap" title="Hide rows with no note"><input type="checkbox" id="unpaid-hide-blank-notes" onchange="fetchUnpaidReservations(0)" class="accent-amber-500"> Hide blank Notes</label>
+          </div>
+        </div>
+        <div class="overflow-x-auto w-full">
+          <table class="w-full text-left text-[11px] border-collapse table-compact">
+            <thead class="bg-slate-950 text-slate-400 uppercase font-semibold border-b border-slate-800">
+              <tr><th>Ref / Unit</th><th>Guest</th><th>Notes</th><th>Hotel</th><th class="whitespace-nowrap">Stay Dates</th><th class="text-right whitespace-nowrap">Booked</th><th class="text-right whitespace-nowrap">Paid</th><th class="text-right whitespace-nowrap">Due</th></tr>
+            </thead>
+            <tbody id="unpaid-tbody" class="divide-y divide-slate-800 text-slate-300">
+              <tr><td colspan="8" class="py-8 text-center text-slate-500">Loading unpaid folios...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="p-2 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
+          <span id="unpaid-pagination-info">0 records</span>
+          <div class="flex gap-2"><button id="btn-unpaid-prev" onclick="changeUnpaidPage(-1)" class="px-2 py-0.5 bg-slate-800 rounded border border-slate-700">Prev</button><button id="btn-unpaid-next" onclick="changeUnpaidPage(1)" class="px-2 py-0.5 bg-slate-800 rounded border border-slate-700">Next</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: DAILY OPERATIONS & HANDOVER (SEPARATE NOTES COLUMN & COMPACT) -->
+    <div id="tab-content-ops" class="hidden space-y-5">
+      <div class="bg-slate-900/90 p-4 rounded-xl border border-slate-800 shadow-xl space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex flex-wrap items-center gap-3">
+            <div><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Property</label><select id="ops-property" onchange="fetchDailyOps()" class="bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-3 py-1.5 focus:outline-none min-w-[200px]"><option value="ALL">All Properties</option></select></div>
+            <div><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Target Date</label><input type="date" id="ops-date" onchange="fetchDailyOps()" class="bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-2 py-1.5 focus:outline-none" /></div>
+            <div class="flex items-end gap-1.5 pt-4">
+              <button onclick="setOpsDate(-1)" class="px-2.5 py-1.5 text-xs font-medium rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 transition">Yesterday</button>
+              <button onclick="setOpsDate(0)" class="px-2.5 py-1.5 text-xs font-medium rounded-md bg-emerald-600 hover:bg-emerald-500 text-white transition">Today</button>
+              <button onclick="setOpsDate(1)" class="px-2.5 py-1.5 text-xs font-medium rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 transition">Tomorrow</button>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 pt-4">
+            <button onclick="openNewBookingModal('ops')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow transition flex items-center gap-1.5 hide-on-screenshot"><i class="fa-solid fa-plus"></i><span>New Booking</span></button>
+            <!-- ALL SCREENSHOT & CLIQ BUTTONS RESTORED -->
+            <button id="btn-batch-screenshot" onclick="downloadAllHotelsScreenshots()" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-lg shadow transition flex items-center gap-1.5 hide-on-screenshot"><i class="fa-solid fa-images"></i><span>Download All Screenshots</span></button>
+            <button onclick="sendToZohoCliq()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow transition flex items-center gap-1.5 hide-on-screenshot"><i class="fa-solid fa-paper-plane"></i><span>Send to Zoho</span></button>
+            <button onclick="copyCliqFormat()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow transition flex items-center gap-1.5 hide-on-screenshot"><i class="fa-solid fa-copy"></i><span>Copy Text</span></button>
+            <button onclick="captureUltraScreenshot('zoho-cliq-card', 'Snapshot')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 transition flex items-center gap-1.5 hide-on-screenshot"><i class="fa-solid fa-camera text-emerald-400"></i><span>Capture Brief</span></button>
+          </div>
+        </div>
+      </div>
+
+      <section id="duplicate-guest-watch" class="bg-slate-900 border border-amber-500/30 rounded-xl shadow-xl overflow-hidden">
+        <div class="p-3 border-b border-slate-800 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/30 inline-flex items-center justify-center text-amber-300"><i class="fa-solid fa-arrows-left-right-to-line"></i></span>
+            <div><h3 class="text-sm font-bold text-amber-300">Cross-property guest watch</h3><p class="text-[10px] text-slate-500">Possible relocations and duplicate guest names for <span id="duplicate-guest-date" class="font-mono text-amber-200"></span></p></div>
+          </div>
+          <span id="duplicate-guest-count" class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-800 text-slate-400 border border-slate-700">0 matches</span>
+        </div>
+        <div id="duplicate-guest-list" class="p-3">
+          <div class="text-center text-xs text-slate-500 py-3"><i class="fa-solid fa-spinner fa-spin mr-1"></i>Checking reservations...</div>
+        </div>
+      </section>
+
+      <!-- REDESIGNED ZOHO CLIQ SNAPSHOT (Matching Savoy Image) -->
+      <div id="zoho-cliq-card" class="bg-[#121826] border border-[#2b3548] rounded-xl p-5 shadow-2xl relative overflow-hidden text-[#e2e8f0]">
+        <div class="absolute top-0 right-0 bg-[#4f46e5] text-white text-[9px] uppercase font-bold tracking-widest px-3 py-1 rounded-bl-lg shadow">Zoho Cliq Snapshot Preview</div>
+        <div class="flex flex-wrap items-center justify-between border-b border-[#2b3548] pb-3 mb-3 gap-3">
+          <div>
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="inline-block w-2.5 h-2.5 rounded-full bg-[#10b981]"></span>
+              <h2 id="preview-hotel-title" class="text-xl font-bold text-white tracking-wide">All Properties</h2>
+            </div>
+            <p class="text-[10px] text-[#94a3b8] mt-0.5">Daily Handover Brief • Target Date: <span id="preview-date-text" class="text-[#10b981] font-mono font-medium"></span></p>
+          </div>
+          <div class="flex items-center gap-2 text-center">
+            <div class="bg-[#1e293b] border border-[#334155] rounded-md px-3 py-1"><div class="text-[8px] font-bold text-[#94a3b8] uppercase">Arrivals</div><div id="cliq-total-arrivals" class="text-base font-black text-[#10b981]">0</div></div>
+            <div class="bg-[#1e293b] border border-[#334155] rounded-md px-3 py-1"><div class="text-[8px] font-bold text-[#94a3b8] uppercase">Departures</div><div id="cliq-total-departures" class="text-base font-black text-[#38bdf8]">0</div></div>
+            <div class="bg-[#1e293b] border border-[#334155] rounded-md px-3 py-1"><div class="text-[8px] font-bold text-[#94a3b8] uppercase">Pending Due</div><div id="cliq-total-due" class="text-base font-black text-[#fbbf24]">£0.00</div></div>
+          </div>
+        </div>
+        <div class="bg-[#0f172a] rounded-lg p-3 border border-[#1e293b] text-[11px]">
+          <div class="font-bold text-[#c7d2fe] mb-1.5 flex items-center gap-1.5"><i class="fa-solid fa-list-check"></i> Handover Brief Highlights:</div>
+          <div id="cliq-highlights" class="space-y-1 text-[#cbd5e1] leading-relaxed ml-1"></div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 gap-6">
+        <!-- Arrivals -->
+        <div id="arrivals-capture-area" class="bg-slate-900 border border-slate-800 rounded-xl shadow-xl overflow-hidden w-full relative">
+          <div class="p-3 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
+            <div class="flex flex-wrap items-center gap-2">
+              <h3 class="text-sm font-bold text-emerald-400"><i class="fa-solid fa-arrow-right-to-bracket mr-1"></i>Expected Arrivals <span class="text-[9px] font-medium text-slate-400">(Check-in)</span></h3>
+              <span id="arrivals-hotel-subtitle" class="text-[10px] font-medium text-slate-300 bg-slate-800 px-2 py-0.5 rounded border border-slate-700 hidden"></span>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <input type="search" id="ops-arrivals-filter" placeholder="Filter arrivals..." aria-label="Filter expected arrivals" oninput="filterOpsTable('ops-arrivals-tbody', this.value)" class="px-2.5 py-1 bg-slate-950 border border-slate-700 text-slate-200 text-[10px] rounded-md focus:outline-none focus:border-emerald-500 w-36 hide-on-screenshot">
+              <select id="ops-arrivals-name-sort" onchange="filterOpsTable('ops-arrivals-tbody')" title="Sort Guest column" class="px-2 py-1 bg-slate-950 border border-slate-700 text-slate-200 text-[10px] rounded-md focus:outline-none hide-on-screenshot"><option value="name_asc">Guest A-Z</option><option value="name_desc">Guest Z-A</option></select>
+              <label class="flex items-center gap-1 text-[10px] text-slate-300 whitespace-nowrap hide-on-screenshot" title="Hide rows where Paid is zero"><input type="checkbox" id="ops-arrivals-hide-zero-paid" onchange="filterOpsTable('ops-arrivals-tbody')" class="accent-emerald-500"> 0 Paid</label>
+              <label class="flex items-center gap-1 text-[10px] text-slate-300 whitespace-nowrap hide-on-screenshot" title="Hide rows with no note"><input type="checkbox" id="ops-arrivals-hide-blank-notes" onchange="filterOpsTable('ops-arrivals-tbody')" class="accent-amber-500"> Blank Notes</label>
+              <button onclick="captureUltraScreenshot('arrivals-capture-area', 'Arrivals')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-md border border-slate-700 transition flex items-center gap-1.5 hide-on-screenshot"><i class="fa-solid fa-camera text-emerald-400"></i><span>Screenshot</span></button>
+              <span id="badge-arrivals-count" class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">0 Guests</span>
+            </div>
+          </div>
+          <div class="overflow-x-auto w-full">
+            <table class="w-full text-left text-[11px] border-collapse table-compact">
+              <thead class="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
+                <tr><th>Ref / Unit</th><th>Guest Name</th><th>Note / Group</th><th>Phone / Contact</th><th>Stay Dates</th><th>Channel</th><th class="text-right">Booked</th><th class="text-right">Paid</th><th class="text-right">Balance Due</th><th class="text-center">Status</th></tr>
+              </thead>
+              <tbody id="ops-arrivals-tbody" class="divide-y divide-slate-800 text-slate-300">
+                <tr><td colspan="10" class="py-6 text-center text-slate-500">Select a date & property.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Departures -->
+        <div id="departures-capture-area" class="bg-slate-900 border border-slate-800 rounded-xl shadow-xl overflow-hidden w-full relative">
+          <div class="p-3 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <h3 class="text-sm font-bold text-sky-400"><i class="fa-solid fa-arrow-right-from-bracket mr-1"></i>Expected Departures <span class="text-[9px] font-medium text-slate-400">(Check-out)</span></h3>
+              <span id="departures-hotel-subtitle" class="text-[10px] font-medium text-slate-300 bg-slate-800 px-2 py-0.5 rounded border border-slate-700 hidden"></span>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <input type="search" id="ops-departures-filter" placeholder="Filter departures..." aria-label="Filter expected departures" oninput="filterOpsTable('ops-departures-tbody', this.value)" class="px-2.5 py-1 bg-slate-950 border border-slate-700 text-slate-200 text-[10px] rounded-md focus:outline-none focus:border-sky-500 w-36 hide-on-screenshot">
+              <select id="ops-departures-name-sort" onchange="filterOpsTable('ops-departures-tbody')" title="Sort Guest column" class="px-2 py-1 bg-slate-950 border border-slate-700 text-slate-200 text-[10px] rounded-md focus:outline-none hide-on-screenshot"><option value="name_asc">Guest A-Z</option><option value="name_desc">Guest Z-A</option></select>
+              <label class="flex items-center gap-1 text-[10px] text-slate-300 whitespace-nowrap hide-on-screenshot" title="Hide rows where Paid is zero"><input type="checkbox" id="ops-departures-hide-zero-paid" onchange="filterOpsTable('ops-departures-tbody')" class="accent-emerald-500"> 0 Paid</label>
+              <label class="flex items-center gap-1 text-[10px] text-slate-300 whitespace-nowrap hide-on-screenshot" title="Hide rows with no note"><input type="checkbox" id="ops-departures-hide-blank-notes" onchange="filterOpsTable('ops-departures-tbody')" class="accent-amber-500"> Blank Notes</label>
+              <button onclick="captureUltraScreenshot('departures-capture-area', 'Departures')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-md border border-slate-700 transition flex items-center gap-1.5 hide-on-screenshot"><i class="fa-solid fa-camera text-sky-400"></i><span>Screenshot</span></button>
+              <span id="badge-departures-count" class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-sky-500/20 text-sky-400 border border-sky-500/30">0 Guests</span>
+            </div>
+          </div>
+          <div class="overflow-x-auto w-full">
+            <table class="w-full text-left text-[11px] border-collapse table-compact">
+              <thead class="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
+                <tr><th>Ref / Unit</th><th>Guest Name</th><th>Note / Group</th><th>Phone / Contact</th><th>Stay Dates</th><th>Channel</th><th class="text-right">Booked</th><th class="text-right">Paid</th><th class="text-right">Balance Due</th><th class="text-center">Status</th></tr>
+              </thead>
+              <tbody id="ops-departures-tbody" class="divide-y divide-slate-800 text-slate-300">
+                <tr><td colspan="10" class="py-6 text-center text-slate-500">Select a date & property.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: CALENDAR VIEW (OTA ICONS & OVERBOOKING STRIPES) -->
+    <div id="tab-content-cal" class="hidden space-y-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-xl flex flex-wrap items-end justify-between gap-3">
+        <div class="flex flex-wrap items-end gap-3">
+          <div><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Hotel</label><select id="cal-property-select" onchange="fetchCalendarGrid()" class="bg-slate-950 border border-slate-700 text-xs rounded-md px-2 py-1.5 text-white outline-none min-w-[170px]"></select></div>
+          <div><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">From</label><input type="date" id="cal-from-date" onchange="fetchCalendarGrid()" class="bg-slate-950 border border-slate-700 text-xs rounded-md px-2 py-1.5 text-white outline-none"></div>
+          <div><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">To</label><input type="date" id="cal-to-date" onchange="fetchCalendarGrid()" class="bg-slate-950 border border-slate-700 text-xs rounded-md px-2 py-1.5 text-white outline-none"></div>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button onclick="openNewBookingModal('calendar')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold shadow transition"><i class="fa-solid fa-plus mr-1"></i>New Booking</button>
+          <button id="calendar-canceled-toggle" onclick="toggleCanceledCalendarBookings()" class="px-2.5 py-1 bg-rose-950/60 hover:bg-rose-900/80 text-rose-200 border border-rose-800/70 rounded text-xs font-semibold transition" title="Hide canceled reservations"><i class="fa-solid fa-eye-slash mr-1"></i>Hide Canceled</button>
+          <button onclick="shiftCalendarDays(-7)" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs transition"><i class="fa-solid fa-angles-left"></i> Wk</button>
+          <button onclick="shiftCalendarDays(-1)" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs transition"><i class="fa-solid fa-angle-left"></i></button>
+          <span id="cal-range-label" class="px-2 py-1 text-[10px] font-mono font-bold text-indigo-400 bg-slate-950 rounded border border-slate-800">-</span>
+          <button onclick="shiftCalendarDays(1)" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs transition"><i class="fa-solid fa-angle-right"></i></button>
+          <button onclick="shiftCalendarDays(7)" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs transition">Wk <i class="fa-solid fa-angles-right"></i></button>
+          <button onclick="resetCalendarToToday()" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-bold ml-1 shadow transition">Today</button>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 px-1 text-[10px] text-slate-400">
+        <span class="font-bold uppercase tracking-wide text-slate-500">Legend</span>
+        <span><i class="fa-solid fa-square text-orange-500 mr-1"></i>Booking</span>
+        <span><i class="fa-solid fa-pound-sign text-amber-400 mr-1"></i>Balance due</span>
+        <span><i class="fa-solid fa-note-sticky text-amber-400 mr-1"></i>Note</span>
+        <span><i class="fa-solid fa-grip-lines text-slate-300 mr-1"></i>Overlap</span>
+        <span><i class="fa-solid fa-ban text-rose-400 mr-1"></i>Canceled (editable)</span>
+      </div>
+      <div id="calendar-scroll-shell" class="calendar-scroll-shell bg-slate-900 border border-slate-800 rounded-xl shadow-xl w-full"><div id="calendar-timeline-container" class="min-w-[950px] select-none calendar-pan-surface"></div></div>
+    </div>
+  </main>
+  <!-- ===================================================================== -->
+  <!-- [SECTION-04]: MULTI-PANEL CONTAINER (FOR SIDE-BY-SIDE RELOCATION)     -->
+  <!-- ===================================================================== -->
+  <div id="multi-panel-container" class="panels-wrapper fixed inset-y-0 right-0 z-50 pointer-events-none w-full max-w-full no-print">
+    <!-- Panels will be injected here dynamically by JavaScript -->
+  </div>
+  <div id="new-booking-modal" class="hidden fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 no-print">
+    <form id="new-booking-form" onsubmit="saveNewBooking(event)" class="w-full max-w-3xl max-h-[92vh] overflow-y-auto bg-slate-900 border border-slate-700 rounded-xl shadow-2xl">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-slate-800"><div><h2 class="text-base font-bold text-white"><i class="fa-solid fa-calendar-plus text-emerald-400 mr-2"></i>New Booking</h2><p class="text-[10px] text-slate-400 mt-1">Create a reservation and place it on the calendar.</p></div><button type="button" onclick="closeNewBookingModal()" class="text-slate-400 hover:text-white text-xl" aria-label="Close">&times;</button></div>
+      <div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+        <div><label class="block text-slate-400 mb-1">Booking Reference <span class="text-slate-600">(optional)</span></label><input name="booking_reference" placeholder="Auto-generated if blank" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
+        <div><label class="block text-slate-400 mb-1">Booking Status</label><select name="booking_status" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"><option value="Confirmed">Confirmed</option><option value="Canceled">Canceled</option></select></div>
+        <div><label class="block text-slate-400 mb-1">Property *</label><select id="new-booking-property" name="property_name" onchange="populateNewBookingRooms()" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></select></div>
+        <div><label class="block text-slate-400 mb-1">Room / Unit *</label><select id="new-booking-room" name="room_unit_name" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"><option value="">Select a property first</option></select></div>
+        <div><label class="block text-slate-400 mb-1">Guest Name *</label><input name="guest_name" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
+        <div><label class="block text-slate-400 mb-1">Channel</label><input name="channel" value="Direct" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
+        <div><label class="block text-slate-400 mb-1">Check-in *</label><input id="new-booking-check-in" type="date" name="check_in" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
+        <div><label class="block text-slate-400 mb-1">Check-out *</label><input id="new-booking-check-out" type="date" name="check_out" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
+        <div><label class="block text-slate-400 mb-1">Total Revenue (£)</label><input type="number" name="total_revenue" min="0" step="0.01" value="0" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
+        <div><label class="block text-slate-400 mb-1">Initial Paid (£)</label><input type="number" name="paid_amount" min="0" step="0.01" value="0" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
+        <div><label class="block text-slate-400 mb-1">Phone</label><input name="telephone" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
+        <div><label class="block text-slate-400 mb-1">Email</label><input type="email" name="email" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
+        <div><label class="block text-slate-400 mb-1">Adults</label><input type="number" name="adults" min="1" step="1" value="1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
+        <div><label class="block text-slate-400 mb-1">Children</label><input type="number" name="children" min="0" step="1" value="0" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
+        <div class="md:col-span-2"><label class="block text-slate-400 mb-1">Remarks / Notes</label><textarea name="notes" rows="3" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white" placeholder="Add arrival instructions, guest requests, or internal notes"></textarea></div>
+      </div>
+      <div class="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-800"><button type="button" onclick="closeNewBookingModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg">Cancel</button><button id="new-booking-submit" type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg"><i class="fa-solid fa-check mr-1"></i>Create Booking</button></div>
+    </form>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- [SECTION-05]: FRONTEND JAVASCRIPT & DATA BINDING                      -->
+  <!-- ===================================================================== -->
+  <script>
+    let activeTab = 'ops';
+    let globalPropertiesList = [];
+    let calCurrentDate = new Date();
+    let showCanceledCalendarBookings = true;
+    const CAL_DAYS_DISPLAY = 28;
+    const limit = 25;
+    let currentOffset = 0;
+    let unpaidOffset = 0;
+    const opsTableRecords = {};
+    
+    let searchTimer = null;
+    let unpaidSearchTimer = null;
+    let globalSearchTimer = null;
+    
+    let monthlyChartInstance = null;
+    let channelChartInstance = null;
+    let healthChartInstance = null;
+    let aiReportChartInstance = null;
+    let currentAiReport = { type: 'daily_sales', rows: [], columns: [], title: 'No report loaded' };
+
+    const fmt = (num) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(num || 0);
+    const setElText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+    const encodeBookingData = (booking) => encodeURIComponent(JSON.stringify(booking)).replace(/'/g, '%27');
+    const roomLabel = (value) => {
+      const room = String(value || '').trim();
+      return room ? (room.toLowerCase().startsWith('room ') ? room : `Room ${room}`) : 'Room -';
+    };
+
+    let activeRequests = 0;
+    let activityTimer = null;
+    function setActivityState(isActive, label = 'Updating workspace...') {
+      const rail = document.getElementById('system-activity-rail');
+      const chip = document.getElementById('system-activity-chip');
+      if (!rail || !chip) return;
+      rail.classList.toggle('is-active', isActive);
+      chip.classList.toggle('is-visible', isActive);
+      setElText('system-activity-label', label);
+    }
+    function trackRequestStart(url) {
+      activeRequests += 1;
+      clearTimeout(activityTimer);
+      activityTimer = setTimeout(() => {
+        const requestUrl = String(url);
+        const label = requestUrl.includes('/calendar/') ? 'Mapping calendar...' : requestUrl.includes('/operations/') ? 'Preparing handover...' : 'Updating workspace...';
+        setActivityState(true, label);
+      }, 180);
+    }
+    function trackRequestEnd() {
+      activeRequests = Math.max(0, activeRequests - 1);
+      if (activeRequests === 0) {
+        clearTimeout(activityTimer);
+        setActivityState(false);
+      }
+    }
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = (...args) => {
+      trackRequestStart(args[0]);
+      return nativeFetch(...args).finally(trackRequestEnd);
+    };
+
+    function applyTheme(theme) {
+      const isLight = theme === 'light';
+      document.documentElement.classList.toggle('light-mode', isLight);
+      document.documentElement.classList.toggle('dark', !isLight);
+      localStorage.setItem('eviivo-theme', isLight ? 'light' : 'dark');
+      const button = document.getElementById('theme-toggle-btn');
+      const icon = document.getElementById('theme-toggle-icon');
+      if (button) button.title = isLight ? 'Switch to dark mode' : 'Switch to light mode';
+      if (icon) icon.className = isLight ? 'fa-solid fa-moon text-indigo-500' : 'fa-solid fa-sun text-amber-300';
+    }
+
+    function toggleTheme() {
+      applyTheme(document.documentElement.classList.contains('light-mode') ? 'dark' : 'light');
+    }
+
+    // --- ESCAPE KEY LISTENER ---
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const panels = document.getElementById('multi-panel-container');
+        if(panels) panels.innerHTML = ''; 
+        closeSearchDropdown();
+      }
+    });
+
+    // --- HELPERS FOR ICONS & TOOLTIPS ---
+    function getNoteIconHtml(note) {
+      if (!note || !note.trim()) return '';
+      return `<div class="note-tooltip-container relative inline-block ml-1 cursor-help"><i class="fa-solid fa-note-sticky text-amber-400 text-[10px]"></i><div class="note-tooltip bg-slate-800 border border-slate-700 text-white p-2.5 rounded-xl shadow-2xl text-[10px] w-56 z-50 text-left font-normal leading-relaxed">${note.replace(/"/g, '&quot;')}</div></div>`;
+    }
+
+    function getChannelIcon(channel) {
+      const ch = (channel || '').toLowerCase();
+      if (ch.includes('booking')) return `<span class="px-1 py-0.5 bg-blue-700 text-white rounded text-[8px] font-bold mr-1 shadow-sm" title="Booking.com">B.</span>`;
+      if (ch.includes('expedia')) return `<span class="px-1 py-0.5 bg-yellow-500 text-black rounded text-[8px] font-bold mr-1 shadow-sm" title="Expedia">E.</span>`;
+      if (ch.includes('agoda')) return `<span class="px-1 py-0.5 bg-rose-600 text-white rounded text-[8px] font-bold mr-1 shadow-sm" title="Agoda">A.</span>`;
+      if (ch.includes('airbnb')) return `<span class="px-1 py-0.5 bg-rose-500 text-white rounded text-[8px] font-bold mr-1 shadow-sm" title="Airbnb">Ab.</span>`;
+      if (ch.includes('hotel')) return `<span class="px-1 py-0.5 bg-indigo-500 text-white rounded text-[8px] font-bold mr-1 shadow-sm" title="Hotelbeds">H.</span>`;
+      return ''; // Direct or unknown gets no icon
+    }
+
+    // --- TABS & REFRESH LOGIC ---
+    function switchTab(tab) {
+      activeTab = tab;
+      ['analytics', 'unpaid', 'ops', 'cal', 'ai-reports', 'daily-tasks'].forEach(t => {
+        const c = document.getElementById(`tab-content-${t}`);
+        const b = document.getElementById(`tab-btn-${t === 'cal' ? 'calendar' : t}`);
+        if(c) c.classList.add('hidden');
+        if(b) b.className = 'px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition whitespace-nowrap';
+      });
+      document.getElementById(`tab-content-${tab === 'calendar' ? 'cal' : tab}`).classList.remove('hidden');
+      const btnMap = { 'analytics': 'bg-emerald-600', 'unpaid': 'bg-amber-600', 'ops': 'bg-emerald-600', 'calendar': 'bg-indigo-600', 'ai-reports': 'bg-cyan-600', 'daily-tasks': 'bg-emerald-600' };
+      document.getElementById(`tab-btn-${tab}`).className = `px-3 py-1.5 rounded-md text-white font-semibold transition whitespace-nowrap ${btnMap[tab]}`;
+
+      if (tab === 'analytics') loadAllAnalytics();
+      if (tab === 'unpaid') fetchUnpaidReservations(unpaidOffset);
+      if (tab === 'ops') fetchDailyOps();
+      if (tab === 'calendar') fetchCalendarGrid();
+      if (tab === 'ai-reports' && !currentAiReport.rows.length) runAiReport();
+      if (tab === 'daily-tasks') loadTaskWorkspace();
+    }
+
+    async function triggerFullSystemRefresh() {
+      const btn = document.getElementById('global-refresh-btn');
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-emerald-400"></i> <span class="hidden md:inline">Refreshing...</span>`;
+      await loadPropertiesList();
+      if (activeTab === 'analytics') loadAllAnalytics();
+      if (activeTab === 'unpaid') fetchUnpaidReservations(unpaidOffset);
+      if (activeTab === 'ops') fetchDailyOps();
+      if (activeTab === 'calendar') fetchCalendarGrid();
+      if (activeTab === 'ai-reports') runAiReport();
+      if (activeTab === 'daily-tasks') loadTaskWorkspace();
+      setTimeout(() => { btn.innerHTML = `<i class="fa-solid fa-rotate text-emerald-400"></i> <span class="hidden md:inline">Refresh</span>`; }, 500);
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      applyTheme(localStorage.getItem('eviivo-theme') === 'light' ? 'light' : 'dark');
+      setupSmartDefaults();
+      await loadPropertiesList();
+      setTourParkDefault();
+      switchTab('ops');
+    });
+
+    // --- SMART DEFAULTS ---
+    function setupSmartDefaults() {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${yyyy}-${mm}-${dd}`;
+      
+      const opsDateInput = document.getElementById('ops-date');
+      if (opsDateInput && !opsDateInput.value) opsDateInput.value = todayStr;
+      calCurrentDate = today;
+      setCalendarDateFilters();
+
+      const firstDay = `${yyyy}-${mm}-01`;
+      const lastDay = new Date(yyyy, today.getMonth() + 1, 0).toISOString().split('T')[0];
+      const kpiFrom = document.getElementById('kpi-from-date');
+      const kpiTo = document.getElementById('kpi-to-date');
+      if (kpiFrom && !kpiFrom.value) kpiFrom.value = firstDay;
+      if (kpiTo && !kpiTo.value) kpiTo.value = lastDay;
+      const aiFrom = document.getElementById('ai-report-from');
+      const aiTo = document.getElementById('ai-report-to');
+      if (aiFrom && !aiFrom.value) aiFrom.value = firstDay;
+      if (aiTo && !aiTo.value) aiTo.value = lastDay;
+      const taskDate = document.getElementById('task-date');
+      if (taskDate && !taskDate.value) taskDate.value = todayStr;
+    }
+
+    function setTourParkDefault() {
+      const opsProp = document.getElementById('ops-property');
+      if(!opsProp) return;
+      const options = Array.from(opsProp.options);
+      const tourParkOpt = options.find(o => o.value.toLowerCase().includes('tour park'));
+      if (tourParkOpt) {
+        const val = tourParkOpt.value;
+        ['ops-property', 'unpaid-filter-property', 'cal-property-select', 'kpi-property', 'ai-report-property', 'task-property'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.value = val;
+        });
+      }
+    }
+
+    async function loadPropertiesList() {
+      try {
+        const res = await fetch('/api/properties');
+        const data = await res.json();
+        globalPropertiesList = data;
+        ['ops-property', 'unpaid-filter-property', 'cal-property-select', 'kpi-property', 'ai-report-property', 'task-property'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) {
+            const currentVal = el.value;
+            el.innerHTML = '<option value="ALL">All Properties</option>';
+            data.forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p; el.appendChild(o); });
+            if (id === 'cal-property-select' && (!currentVal || currentVal === 'ALL') && data.length > 0) el.value = data[0];
+            else if(currentVal && currentVal !== 'ALL') el.value = currentVal;
+          }
+        });
+      } catch (err) {
+        console.error('Unable to load properties:', err);
+        ['ai-report-property', 'task-property'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.innerHTML = '<option value="ALL">Properties unavailable</option>';
+        });
+      }
+    }
+
+    function closeNewBookingModal() {
+      document.getElementById('new-booking-modal')?.classList.add('hidden');
+    }
+
+    async function openNewBookingModal(source = 'ops') {
+      const modal = document.getElementById('new-booking-modal');
+      const form = document.getElementById('new-booking-form');
+      const propertySelect = document.getElementById('new-booking-property');
+      if (!modal || !form || !propertySelect) return;
+      form.reset();
+      propertySelect.innerHTML = '<option value="">Select property</option>';
+      globalPropertiesList.forEach(property => {
+        const option = document.createElement('option');
+        option.value = property;
+        option.textContent = property;
+        propertySelect.appendChild(option);
+      });
+
+      const currentProperty = source === 'calendar'
+        ? document.getElementById('cal-property-select')?.value
+        : document.getElementById('ops-property')?.value;
+      if (currentProperty && currentProperty !== 'ALL' && globalPropertiesList.includes(currentProperty)) propertySelect.value = currentProperty;
+      else if (globalPropertiesList.length === 1) propertySelect.value = globalPropertiesList[0];
+
+      const currentDate = source === 'calendar'
+        ? document.getElementById('cal-from-date')?.value
+        : document.getElementById('ops-date')?.value;
+      const checkIn = currentDate || calendarDateKey(new Date());
+      const checkOutDate = new Date(`${checkIn}T00:00:00`);
+      checkOutDate.setDate(checkOutDate.getDate() + 1);
+      document.getElementById('new-booking-check-in').value = checkIn;
+      document.getElementById('new-booking-check-out').value = calendarDateKey(checkOutDate);
+      modal.classList.remove('hidden');
+      await populateNewBookingRooms();
+      document.querySelector('#new-booking-form input[name="guest_name"]')?.focus();
+    }
+
+    async function populateNewBookingRooms() {
+      const property = document.getElementById('new-booking-property')?.value;
+      const roomSelect = document.getElementById('new-booking-room');
+      if (!roomSelect) return;
+      roomSelect.innerHTML = '<option value="">Loading rooms...</option>';
+      if (!property) { roomSelect.innerHTML = '<option value="">Select a property first</option>'; return; }
+      try {
+        const response = await fetch(`/api/properties/rooms?property=${encodeURIComponent(property)}`);
+        const rooms = await response.json();
+        roomSelect.innerHTML = rooms.length ? '<option value="">Select room / unit</option>' : '<option value="">No rooms found</option>';
+        rooms.forEach(room => {
+          const option = document.createElement('option');
+          option.value = room;
+          option.textContent = room;
+          roomSelect.appendChild(option);
+        });
+      } catch (error) {
+        roomSelect.innerHTML = '<option value="">Unable to load rooms</option>';
+      }
+    }
+
+    async function saveNewBooking(event) {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const submit = document.getElementById('new-booking-submit');
+      const payload = Object.fromEntries(new FormData(form).entries());
+      submit.disabled = true;
+      submit.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Creating...';
+      try {
+        const response = await fetch('/api/reservations', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        });
+        const responseText = await response.text();
+        let result;
+        try { result = responseText ? JSON.parse(responseText) : {}; } catch (parseError) {
+          throw new Error(`Server returned HTTP ${response.status} instead of JSON. Restart the API server and try again.`);
+        }
+        if (!response.ok) throw new Error(result.error || `Unable to create booking (HTTP ${response.status}).`);
+        closeNewBookingModal();
+        alert(`Booking ${result.booking_reference} created successfully.`);
+        await triggerFullSystemRefresh();
+      } catch (error) {
+        alert(`Unable to create booking: ${error.message}`);
+      } finally {
+        submit.disabled = false;
+        submit.innerHTML = '<i class="fa-solid fa-check mr-1"></i>Create Booking';
+      }
+    }
+
+    // =======================================================================
+    // DYNAMIC MULTI-PANEL LOGIC (SIDE-BY-SIDE RELOCATION)
+    // =======================================================================
+    function openUniversalModal(encodedData) {
+      const b = JSON.parse(decodeURIComponent(encodedData));
+      const ref = b.booking_reference;
+      const bookingNotes = b.notes ?? b.booking_notes ?? b.custom_notes ?? '';
+      const bookingStatus = String(b.booking_status || 'Confirmed').trim() || 'Confirmed';
+      const isCanceled = ['canceled', 'cancelled'].includes(bookingStatus.toLowerCase());
+      
+      const container = document.getElementById('multi-panel-container');
+      if(document.getElementById(`panel-${ref}`)) return; // Already open
+
+      const panel = document.createElement('div');
+      panel.id = `panel-${ref}`;
+      panel.className = 'edit-panel bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden pointer-events-auto flex flex-col no-print shrink-0 min-h-[60vh]';
+      
+      // Calculate Stats
+      let chargesSum = parseFloat(b.total_charges || 0);
+      let paymentsSum = parseFloat(b.total_paid_amount || 0);
+      let baseRate = parseFloat(b.booked_amount || 0);
+      let totalBilled = baseRate + Math.abs(chargesSum);
+      let balance = totalBilled - paymentsSum;
+
+      let historyHtml = '';
+      if(b.payment_history && b.payment_history.length > 0) {
+        b.payment_history.forEach(p => {
+          const amt = parseFloat(p.amount);
+          const isCharge = amt < 0;
+          historyHtml += `
+            <tr class="hover:bg-slate-800/60 border-b border-slate-800/50 transition">
+              <td class="p-2 font-mono text-[10px] text-slate-400">${p.payment_date ? p.payment_date.split('T')[0] : ''}</td>
+              <td class="p-2 font-bold ${isCharge ? 'text-amber-400' : 'text-emerald-400'}">${p.description || 'Record'}</td>
+              <td class="p-2 text-slate-400">${isCharge ? 'Charge' : p.payment_method}</td>
+              <td class="p-2 text-right font-bold ${isCharge ? 'text-amber-400' : 'text-emerald-400'}">${isCharge ? '+' : '-'}${fmt(Math.abs(amt))}</td>
+              <td class="p-2 text-center"><button onclick="removePaymentRecord('${ref}', ${p.payment_id})" class="px-2 py-0.5 bg-rose-900/40 hover:bg-rose-600 text-rose-300 hover:text-white rounded border border-rose-800/60 transition"><i class="fa-solid fa-trash-can"></i></button></td>
+            </tr>`;
+        });
+      } else {
+        historyHtml = `<tr><td colspan="5" class="p-4 text-center text-slate-500 italic">No historical records found.</td></tr>`;
+      }
+
+      panel.innerHTML = `
+        <div class="bg-slate-950/90 border-b border-slate-800 px-4 py-3 flex items-center justify-between shrink-0">
+          <div><h2 class="text-base font-bold text-white flex items-center gap-2"><i class="fa-solid fa-hotel text-indigo-400"></i> ${b.property_name || 'Hotel'}</h2>
+          <div class="text-[10px] text-slate-400 mt-0.5">Ref: <span class="font-mono font-bold text-emerald-400 bg-slate-800 px-1 rounded">${ref}</span> | ${b.guest_name}</div></div>
+          <button onclick="document.getElementById('panel-${ref}').remove()" class="text-slate-500 hover:text-white text-xl transition">&times;</button>
+        </div>
+
+        <div class="flex bg-slate-900 border-b border-slate-800 px-2 text-[11px] font-semibold overflow-x-auto shrink-0">
+          <button onclick="switchPanelTab('${ref}', 'guest')" id="tab-btn-guest-${ref}" class="px-4 py-2 border-b-2 border-indigo-500 text-indigo-400 whitespace-nowrap">Guest Details</button>
+          <button onclick="switchPanelTab('${ref}', 'finance')" id="tab-btn-finance-${ref}" class="px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">Financials</button>
+          <button onclick="switchPanelTab('${ref}', 'invoice')" id="tab-btn-invoice-${ref}" class="px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">Folio (Corp)</button>
+        </div>
+
+        <div id="ribbon-${ref}" class="grid grid-cols-4 gap-2 text-center text-[10px] p-3 bg-slate-950/50 border-b border-slate-800 shrink-0">
+          <div class="bg-slate-900 border border-slate-700/50 p-2 rounded-lg"><div class="text-[9px] uppercase font-bold text-slate-400">Total</div><div class="font-bold text-white mt-0.5">${fmt(totalBilled)}</div></div>
+          <div class="bg-slate-900 border border-slate-700/50 p-2 rounded-lg"><div class="text-[9px] uppercase font-bold text-emerald-400">Paid</div><div class="font-bold text-emerald-400 mt-0.5">${fmt(paymentsSum)}</div></div>
+          <div class="bg-slate-900 border border-slate-700/50 p-2 rounded-lg"><div class="text-[9px] uppercase font-bold text-amber-400">Balance</div><div class="font-bold text-amber-400 mt-0.5">${fmt(balance)}</div></div>
+          <div class="bg-slate-900 border border-rose-900/30 p-2 rounded-lg"><div class="text-[9px] uppercase font-bold text-rose-400">Due Now</div><div class="font-bold text-rose-400 mt-0.5">${fmt(Math.max(0, balance))}</div></div>
+        </div>
+
+        <div class="p-4 overflow-y-auto flex-1 text-sm text-slate-300 w-full relative">
+          <!-- GUEST TAB -->
+          <div id="tab-guest-${ref}" class="space-y-3 flex flex-col h-full">
+            <div class="grid grid-cols-2 gap-3 flex-1">
+              <div class="col-span-2 grid grid-cols-3 gap-2 rounded-lg border border-slate-800 bg-slate-950/50 p-2.5">
+                <div><div class="text-[9px] uppercase font-bold text-slate-500">Check-in</div><div class="text-xs font-semibold text-emerald-300 mt-1">${b.check_in || '-'}</div></div>
+                <div><div class="text-[9px] uppercase font-bold text-slate-500">Check-out</div><div class="text-xs font-semibold text-sky-300 mt-1">${b.check_out || '-'}</div></div>
+                <div><div class="text-[9px] uppercase font-bold text-slate-500">Stay</div><div class="text-xs font-semibold text-white mt-1">${b.nights || 0} night${Number(b.nights) === 1 ? '' : 's'}</div></div>
+              </div>
+              <div class="col-span-2"><label class="block text-[10px] font-bold text-emerald-400 uppercase mb-1.5"><i class="fa-solid fa-bed"></i> Room Assignment</label></div>
+              <div><label class="block text-[10px] text-slate-400 mb-1">Property</label><select id="prop-${ref}" onchange="populatePanelRooms('${ref}')" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs"></select></div>
+              <div><label class="block text-[10px] text-slate-400 mb-1">Assigned Unit</label><select id="room-${ref}" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs"></select></div>
+              
+              <div class="col-span-2 border-t border-slate-800 pt-2"><label class="block text-[10px] font-bold text-indigo-400 uppercase mb-1.5"><i class="fa-solid fa-address-card"></i> Guest Information</label></div>
+              <div><label class="block text-[10px] text-slate-400 mb-1">Guest Name</label><input type="text" id="name-${ref}" value="${b.guest_name||''}" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs"></div>
+              
+              <!-- Channel as Text Input requested by user -->
+              <div><label class="block text-[10px] text-slate-400 mb-1">Channel / Source</label>
+                <input type="text" id="chan-${ref}" value="${b.channel||'Direct'}" placeholder="e.g. Agoda, Direct" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-emerald-400 text-xs font-semibold">
+              </div>
+              
+              <div><label class="block text-[10px] text-slate-400 mb-1">Contact Phone</label><input type="text" id="phone-${ref}" value="${b.telephone||''}" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs"></div>
+              <div><label class="block text-[10px] text-slate-400 mb-1">Email Address</label><input type="email" id="email-${ref}" value="${b.email||''}" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs"></div>
+              <div><label class="block text-[10px] text-slate-400 mb-1">Booking Status</label><select id="status-${ref}" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs ${isCanceled ? 'text-rose-300' : 'text-emerald-300'}"><option value="${bookingStatus}" selected>${bookingStatus}</option>${bookingStatus !== 'Confirmed' ? '<option value="Confirmed">Confirmed</option>' : ''}${!isCanceled ? '<option value="Canceled">Canceled</option>' : ''}${isCanceled ? '<option value="Confirmed">Restore to Confirmed</option>' : ''}</select></div>
+              
+              <div class="col-span-2"><label class="block text-[10px] text-slate-400 mb-1">Remarks / Notes</label><textarea id="notes-${ref}" rows="4" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs" placeholder="Add custom notes here..."></textarea></div>
+            </div>
+            <div class="flex justify-between items-center pt-3 border-t border-slate-800 mt-2 shrink-0">
+              <div class="flex items-center gap-2"><button onclick="setBookingCancellation('${ref}', ${!isCanceled})" class="px-3 py-1.5 ${isCanceled ? 'bg-emerald-900/40 hover:bg-emerald-600 text-emerald-300' : 'bg-amber-900/40 hover:bg-amber-600 text-amber-300'} hover:text-white text-[10px] font-bold rounded-lg transition"><i class="fa-solid ${isCanceled ? 'fa-rotate-left' : 'fa-ban'} mr-1"></i> ${isCanceled ? 'Restore Booking' : 'Cancel Booking'}</button><button onclick="deleteBookingRecord('${ref}')" class="px-3 py-1.5 bg-rose-900/40 hover:bg-rose-600 text-rose-300 hover:text-white text-[10px] font-bold rounded-lg transition"><i class="fa-solid fa-trash-can mr-1"></i> Delete Permanently</button></div>
+              <button onclick="savePanelGuestDetails('${ref}')" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-lg transition"><i class="fa-solid fa-floppy-disk mr-1"></i> Save Changes</button>
+            </div>
+          </div>
+
+          <!-- FINANCE TAB -->
+          <div id="tab-finance-${ref}" class="hidden space-y-3 flex flex-col h-full">
+            <div class="bg-slate-950/50 border border-slate-800 rounded-lg overflow-hidden w-full flex-1 flex flex-col min-h-[150px]">
+              <div class="px-3 py-1.5 bg-slate-900 border-b border-slate-800 font-bold text-[10px] text-slate-200 uppercase tracking-wide"><i class="fa-solid fa-list-ul mr-1 text-indigo-400"></i> Ledger</div>
+              <div class="overflow-x-auto flex-1 h-full"><table class="w-full text-left text-[11px]"><thead class="bg-slate-950 text-slate-500 text-[9px] uppercase sticky top-0 z-10"><tr><th class="p-2">Date</th><th class="p-2">Desc</th><th class="p-2">Method</th><th class="p-2 text-right">Amt</th><th class="p-2 text-center">Del</th></tr></thead><tbody class="divide-y divide-slate-800 text-slate-300">${historyHtml}</tbody></table></div>
+            </div>
+            <div class="border border-slate-700 bg-slate-900 rounded-lg p-3 w-full shrink-0">
+              <div class="font-bold text-[10px] text-emerald-400 mb-2 uppercase"><i class="fa-solid fa-plus-circle mr-1"></i> New Record</div>
+              <div class="grid grid-cols-2 gap-2 text-[10px]">
+                <div><label class="block text-slate-400 mb-0.5">Type</label><select id="ftype-${ref}" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white"><option value="payment">Payment</option><option value="charge">Charge</option></select></div>
+                <div><label class="block text-slate-400 mb-0.5">Amount</label><input type="number" step="0.01" id="famt-${ref}" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-emerald-400 font-bold"></div>
+                <div><label class="block text-slate-400 mb-0.5">Method</label><select id="fmeth-${ref}" onchange="toggleCardField('${ref}')" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white"><option value="Cash">Cash</option><option value="External Card Reader">Ext Card Reader</option><option value="Manual Extra Net VCC">Manual VCC</option><option value="Bank Transfer">Bank Transfer</option><option value="Voucher">Voucher</option><option value="On Account">On Account</option></select></div>
+                <div><label class="block text-slate-400 mb-0.5">Description</label><input type="text" id="fdesc-${ref}" placeholder="e.g. Deposit" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white"></div>
+              </div>
+              <div id="fcardsec-${ref}" class="grid grid-cols-2 gap-2 text-[10px] mt-2 hidden bg-slate-950/60 p-2 rounded border border-slate-800">
+                <div><label class="block text-slate-400 mb-0.5">Brand</label><input type="text" id="fbrand-${ref}" class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-white"></div>
+                <div><label class="block text-slate-400 mb-0.5">Last 4</label><input type="text" maxlength="4" id="flast4-${ref}" class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-white font-mono"></div>
+              </div>
+              <div class="mt-2 text-right"><button onclick="addPanelPayment('${ref}')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded shadow-lg text-[10px]">Save Record</button></div>
+            </div>
+          </div>
+
+          <!-- INVOICE TAB -->
+          <div id="tab-invoice-${ref}" class="hidden space-y-3 flex flex-col h-full">
+            <div class="bg-slate-950/50 p-3 rounded-lg border border-slate-800 shrink-0">
+              <label class="block text-[10px] font-bold text-indigo-400 uppercase mb-2"><i class="fa-solid fa-building"></i> Corporate Info</label>
+              <div class="grid grid-cols-2 gap-2">
+                <div><label class="block text-[10px] text-slate-400 mb-1">Company Name</label><input type="text" id="comp-${ref}" value="${b.company_name||''}" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white text-[10px]"></div>
+                <div><label class="block text-[10px] text-slate-400 mb-1">VAT Number</label><input type="text" id="vat-${ref}" value="${b.company_vat||''}" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white text-[10px] font-mono"></div>
+              </div>
+              <div class="text-right mt-2"><button onclick="savePanelGuestDetails('${ref}')" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[9px] font-bold rounded transition">Update Corporate</button></div>
+            </div>
+            
+            <div class="bg-white text-slate-900 p-4 rounded-lg shadow-inner flex-1 overflow-y-auto">
+              <div class="flex justify-between border-b-2 border-slate-200 pb-3 mb-3">
+                <div><h1 class="text-lg font-black text-slate-800">Eviivo Hotel</h1><p class="text-[10px] text-slate-500">Folio Statement</p></div>
+                <div class="text-right"><div class="text-xs font-mono font-bold text-slate-800">INV-${ref}</div><div class="text-[9px] text-slate-500">${new Date().toISOString().split('T')[0]}</div></div>
+              </div>
+              <div class="text-[10px] mb-3 leading-relaxed"><b>Billed To:</b> ${b.guest_name} ${b.company_name ? '<br>'+b.company_name : ''} ${b.company_vat ? '<br>VAT: '+b.company_vat : ''}</div>
+              <table class="w-full text-[10px] text-left mb-4 border-collapse"><thead class="border-b border-slate-300 text-slate-500"><tr><th class="pb-1">Desc</th><th class="pb-1 text-right">Amount (£)</th></tr></thead>
+              <tbody><tr><td class="py-1 font-bold">Room Rate</td><td class="py-1 text-right font-bold">${fmt(baseRate)}</td></tr></tbody></table>
+              <div class="flex justify-end text-[11px]"><div class="w-40"><div class="flex justify-between mb-1"><span>Billed:</span><b>${fmt(totalBilled)}</b></div><div class="flex justify-between text-emerald-600 mb-1 border-b pb-1"><span>Paid:</span><b>${fmt(paymentsSum)}</b></div><div class="flex justify-between font-black text-slate-900"><span>Due:</span><span>${fmt(balance)}</span></div></div></div>
+            </div>
+          </div>
+        </div>
+      `;
+      container.prepend(panel); // Prepend so newest opens on the left of existing
+      document.getElementById(`notes-${ref}`).value = bookingNotes;
+
+      // Populate Properties
+      const propSel = document.getElementById(`prop-${ref}`);
+      globalPropertiesList.forEach(p => {
+        const opt = document.createElement('option'); opt.value = p; opt.textContent = p;
+        if(p.trim().toLowerCase() === (b.property_name||'').trim().toLowerCase()) opt.selected = true;
+        propSel.appendChild(opt);
+      });
+      populatePanelRooms(ref, b.room_unit_name);
+      closeSearchDropdown();
+    }
+
+    function switchPanelTab(ref, tab) {
+      ['guest', 'finance', 'invoice'].forEach(t => {
+        document.getElementById(`tab-${t}-${ref}`).classList.add('hidden');
+        document.getElementById(`tab-btn-${t}-${ref}`).className = "px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap";
+      });
+      document.getElementById(`tab-${tab}-${ref}`).classList.remove('hidden');
+      document.getElementById(`tab-btn-${tab}-${ref}`).className = "px-4 py-2 border-b-2 border-indigo-500 text-indigo-400 font-bold whitespace-nowrap";
+      const ribbon = document.getElementById(`ribbon-${ref}`);
+      if(tab === 'invoice') ribbon.classList.add('hidden'); else ribbon.classList.remove('hidden');
+    }
+
+    async function populatePanelRooms(ref, selectedRoom = '') {
+      const prop = document.getElementById(`prop-${ref}`).value;
+      const rSel = document.getElementById(`room-${ref}`);
+      rSel.innerHTML = '';
+      if(!prop) return;
+      try {
+        const res = await fetch(`/api/properties/rooms?property=${encodeURIComponent(prop)}`);
+        const rooms = await res.json();
+        rooms.forEach(r => { const o = document.createElement('option'); o.value = r; o.textContent = r; if(r===selectedRoom) o.selected=true; rSel.appendChild(o); });
+        if(selectedRoom && !rooms.includes(selectedRoom)) { const o = document.createElement('option'); o.value = selectedRoom; o.textContent = selectedRoom; o.selected=true; rSel.appendChild(o); }
+      } catch(e) {}
+    }
+
+    function toggleCardField(ref) {
+      const meth = document.getElementById(`fmeth-${ref}`).value;
+      const sec = document.getElementById(`fcardsec-${ref}`);
+      if(meth === 'External Card Reader') sec.classList.remove('hidden'); else sec.classList.add('hidden');
+    }
+
+    async function savePanelGuestDetails(ref) {
+      try {
+        await fetch(`/api/reservations/${ref}/update`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            guest_name: document.getElementById(`name-${ref}`).value,
+            telephone: document.getElementById(`phone-${ref}`).value,
+            email: document.getElementById(`email-${ref}`).value,
+            company_name: document.getElementById(`comp-${ref}`).value,
+            company_vat: document.getElementById(`vat-${ref}`).value,
+            channel: document.getElementById(`chan-${ref}`).value, // Now reading from Text Input
+            booking_status: document.getElementById(`status-${ref}`).value,
+            property_name: document.getElementById(`prop-${ref}`).value,
+            room_unit_name: document.getElementById(`room-${ref}`).value,
+            notes: document.getElementById(`notes-${ref}`).value
+          })
+        });
+        document.getElementById(`panel-${ref}`).remove();
+        triggerFullSystemRefresh();
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    async function setBookingCancellation(ref, shouldCancel) {
+      const action = shouldCancel ? 'cancel' : 'restore';
+      if (!confirm(`${shouldCancel ? 'Cancel' : 'Restore'} booking ${ref}?`)) return;
+      try {
+        const response = await fetch(`/api/reservations/${encodeURIComponent(ref)}/status`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ booking_status: shouldCancel ? 'Canceled' : 'Confirmed' })
+        });
+        if (!response.ok) throw new Error((await response.json()).error || `Unable to ${action} booking.`);
+        document.getElementById(`panel-${ref}`).remove();
+        triggerFullSystemRefresh();
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    async function addPanelPayment(ref) {
+      let amt = parseFloat(document.getElementById(`famt-${ref}`).value);
+      const desc = document.getElementById(`fdesc-${ref}`).value || 'System Record';
+      const method = document.getElementById(`fmeth-${ref}`).value;
+      const type = document.getElementById(`ftype-${ref}`).value;
+      let brand = '', last4 = '';
+      if(method === 'External Card Reader') { brand = document.getElementById(`fbrand-${ref}`).value; last4 = document.getElementById(`flast4-${ref}`).value; }
+      if (isNaN(amt) || amt <= 0) return alert('Invalid amount.');
+      if (type === 'charge') amt = -Math.abs(amt); 
+      try {
+        await fetch(`/api/reservations/${ref}/payments`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount: amt, description: desc, payment_method: method, card_brand: brand, card_last_four: last4 })
+        });
+        document.getElementById(`panel-${ref}`).remove();
+        triggerFullSystemRefresh();
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    async function removePaymentRecord(ref, paymentId) {
+      if(!confirm('Waive/Delete this record?')) return;
+      try {
+        await fetch(`/api/payments/${paymentId}`, { method: 'DELETE' });
+        document.getElementById(`panel-${ref}`).remove();
+        triggerFullSystemRefresh();
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    async function deleteBookingRecord(ref) {
+      if(!confirm(`⚠️ PERMANENT: Delete ${ref}?`)) return;
+      try {
+        await fetch(`/api/reservations/${encodeURIComponent(ref)}`, { method: 'DELETE' });
+        document.getElementById(`panel-${ref}`).remove();
+        triggerFullSystemRefresh();
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    // =======================================================================
+    // UNPAID LIST RENDERING
+    // =======================================================================
+    async function fetchUnpaidReservations(offset = 0) {
+      unpaidOffset = offset;
+      const prop = document.getElementById('unpaid-filter-property')?.value || 'ALL';
+      const from = document.getElementById('unpaid-date-from')?.value || '';
+      const to = document.getElementById('unpaid-date-to')?.value || '';
+      const search = document.getElementById('unpaid-search')?.value || '';
+      const nameSort = document.getElementById('unpaid-name-sort')?.value || 'name_asc';
+      const hideZeroPaid = document.getElementById('unpaid-hide-zero-paid')?.checked ? 'true' : 'false';
+      const hideBlankNotes = document.getElementById('unpaid-hide-blank-notes')?.checked ? 'true' : 'false';
+      try {
+        const res = await fetch(`/api/reservations/unpaid?limit=${limit}&offset=${offset}&property=${encodeURIComponent(prop)}&from_date=${from}&to_date=${to}&search=${encodeURIComponent(search)}&name_sort=${nameSort}&hide_zero_paid=${hideZeroPaid}&hide_blank_notes=${hideBlankNotes}`);
+        const { summary, data, total } = await res.json();
+        setElText('unpaid-summary-outstanding', fmt(summary?.total_outstanding||0));
+        setElText('unpaid-summary-booked', fmt(summary?.total_booked||0));
+        setElText('unpaid-summary-count', `${total || 0} Bookings`);
+        
+        const tb = document.getElementById('unpaid-tbody'); tb.innerHTML = '';
+        if (!data || data.length === 0) { tb.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-slate-500 italic">No unpaid folios.</td></tr>`; return; }
+        data.forEach(r => {
+          const enc = encodeBookingData(r);
+          tb.innerHTML += `
+            <tr class="table-row-hover transition" onclick="openUniversalModal('${enc}')">
+              <td class="p-2 font-mono font-bold text-emerald-400"><div class="text-[11px]">${r.booking_reference}</div><div class="text-[9px] text-slate-500 font-sans">${r.room_unit_name}</div></td>
+              <td class="p-2 font-bold text-white"><div class="text-[11px]">${r.guest_name}</div></td>
+              <td class="p-2 text-[10px] text-amber-300 max-w-[150px] truncate">${r.notes || ''}</td>
+              <td class="p-2 text-slate-300">${r.property_name}</td>
+              <td class="p-2 text-[9px] text-slate-400 whitespace-nowrap">${r.check_in?.split('T')[0]}</td>
+              <td class="p-2 text-right font-medium">${fmt(r.booked_amount)}</td>
+              <td class="p-2 text-right font-medium text-emerald-400">${fmt(r.total_paid_amount)}</td>
+              <td class="p-2 text-right font-bold text-amber-400">${fmt(r.balance_due)}</td>
+            </tr>`;
+        });
+      } catch (err) {}
+    }
+
+    function debounceUnpaidSearch() { clearTimeout(unpaidSearchTimer); unpaidSearchTimer = setTimeout(() => fetchUnpaidReservations(0), 300); }
+    function clearUnpaidFilters() { document.getElementById('unpaid-date-from').value = ''; document.getElementById('unpaid-date-to').value = ''; fetchUnpaidReservations(0); }
+    function changeUnpaidPage(d) { fetchUnpaidReservations(unpaidOffset + (d*limit)); }
+
+    // =======================================================================
+    // DAILY OPERATIONS & HANDOVER (SEPARATE NOTES COLUMN & COMPACT PADDING)
+    // =======================================================================
+    function setOpsDate(daysOffset = 0) {
+      calCurrentDate.setDate(calCurrentDate.getDate() + daysOffset);
+      const isoDate = calCurrentDate.toISOString().split('T')[0];
+      const d = document.getElementById('ops-date');
+      if (d) d.value = isoDate;
+      fetchDailyOps();
+    }
+
+    async function fetchDailyOps() {
+      const prop = document.getElementById('ops-property')?.value || 'ALL';
+      const date = document.getElementById('ops-date')?.value || '';
+      if(!date) return;
+
+      const displayHotel = prop === 'ALL' ? 'All Properties' : prop;
+      setElText('preview-hotel-title', displayHotel);
+      setElText('preview-date-text', date);
+      setElText('arrivals-hotel-subtitle', displayHotel);
+      setElText('departures-hotel-subtitle', displayHotel);
+
+      try {
+        const [opsRes, duplicateRes] = await Promise.all([
+          fetch(`/api/operations/daily?property=${encodeURIComponent(prop)}&date=${date}`),
+          fetch(`/api/operations/duplicate-guests?date=${date}`)
+        ]);
+        if (!opsRes.ok || !duplicateRes.ok) throw new Error('Unable to load handover data');
+        const data = await opsRes.json();
+        const duplicateGroups = await duplicateRes.json();
+        renderDuplicateGuestWatch(duplicateGroups);
+        
+        const arr = data.arrivals || [];
+        const dep = data.departures || [];
+        const totalDue = arr.reduce((acc, row) => acc + Math.max(0, parseFloat(row.balance_due || 0)), 0);
+
+        setElText('cliq-total-arrivals', arr.length);
+        setElText('cliq-total-departures', dep.length);
+        setElText('cliq-total-due', fmt(totalDue));
+        setElText('badge-arrivals-count', `${arr.length} Guests`);
+        setElText('badge-departures-count', `${dep.length} Guests`);
+
+        const hLight = document.getElementById('cliq-highlights');
+        if (hLight) {
+          const unpaidArr = arr.filter(r => parseFloat(r.balance_due || 0) > 0);
+          let lis = `<li>Total of <b class="text-white">${arr.length}</b> incoming arrival(s) and <b class="text-white">${dep.length}</b> departure(s).</li>`;
+          lis += `<li><b class="text-white">${unpaidArr.length}</b> arrival(s) have pending balances totaling <b class="text-[#fbbf24]">£${totalDue.toFixed(2)}</b> (collect on arrival).</li>`;
+          
+          unpaidArr.slice(0, 3).forEach(a => {
+            lis += `<li>Arrival: <b>${a.guest_name}</b> (Room ${a.room_unit_name || 'N/A'}) - Balance: <span class="text-[#fbbf24]">£${parseFloat(a.balance_due).toFixed(2)}</span></li>`;
+          });
+          if(unpaidArr.length > 3) lis += `<li><i>- and ${unpaidArr.length - 3} more arrivals listed below...</i></li>`;
+          hLight.innerHTML = `<ul class="list-disc list-inside">${lis}</ul>`;
+        }
+
+        renderOpsTable('ops-arrivals-tbody', arr);
+        renderOpsTable('ops-departures-tbody', dep);
+      } catch (e) {}
+    }
+
+    function renderDuplicateGuestWatch(groups = []) {
+      const list = document.getElementById('duplicate-guest-list');
+      const count = document.getElementById('duplicate-guest-count');
+      if (!list || !count) return;
+      setElText('duplicate-guest-date', document.getElementById('ops-date')?.value || 'selected date');
+      const validGroups = Array.isArray(groups) ? groups : [];
+      count.textContent = `${validGroups.length} ${validGroups.length === 1 ? 'match' : 'matches'}`;
+      if (validGroups.length === 0) {
+        list.innerHTML = `<div class="py-3 text-center text-xs text-emerald-300"><i class="fa-solid fa-circle-check mr-1"></i>No same-name guests found across properties.</div>`;
+        return;
+      }
+
+      list.innerHTML = validGroups.map(group => {
+        const reservations = (group.reservations || []).map(reservation => {
+          const encoded = encodeBookingData(reservation);
+          const balance = parseFloat(reservation.balance_due || 0);
+          return `<button onclick="openUniversalModal('${encoded}')" class="w-full text-left p-2 rounded-lg bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-amber-500/50 transition group">
+            <span class="flex items-center justify-between gap-2"><span class="text-[10px] font-bold text-emerald-300 truncate">${escapeHtml(reservation.property_name || 'Unknown property')}</span><span class="text-[9px] text-slate-500">Check-in</span></span>
+            <span class="flex items-center justify-between gap-2 mt-1"><span class="font-mono text-[9px] text-slate-300">${escapeHtml(reservation.booking_reference)}</span><span class="text-[9px] ${balance > 0 ? 'text-amber-300' : 'text-emerald-300'}">${balance > 0 ? `Due ${fmt(balance)}` : 'Cleared'}</span></span>
+            <span class="block text-[9px] text-slate-500 mt-1">Room ${escapeHtml(reservation.room_unit_name || '-')} · ${escapeHtml(reservation.check_in || '-')} to ${escapeHtml(reservation.check_out || '-')}</span>
+          </button>`;
+        }).join('');
+        return `<article class="border border-amber-500/20 rounded-lg p-2.5 bg-amber-950/10">
+          <div class="flex items-center justify-between gap-2 mb-2"><div class="font-bold text-xs text-white"><i class="fa-solid fa-user-group text-amber-300 mr-1"></i>${escapeHtml(group.guest_name)}</div><span class="text-[9px] text-amber-200">${group.property_count} properties</span></div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-2">${reservations}</div>
+        </article>`;
+      }).join('<div class="h-2"></div>');
+    }
+
+    function renderOpsTable(tbId, records) {
+      opsTableRecords[tbId] = records;
+      const prefix = tbId.replace('ops-', '').replace('-tbody', '');
+      const filter = document.getElementById(`ops-${prefix}-filter`)?.value.trim().toLowerCase() || '';
+      const nameSort = document.getElementById(`ops-${prefix}-name-sort`)?.value || 'name_asc';
+      const hideZeroPaid = document.getElementById(`ops-${prefix}-hide-zero-paid`)?.checked;
+      const hideBlankNotes = document.getElementById(`ops-${prefix}-hide-blank-notes`)?.checked;
+      const visibleRecords = records
+        .filter(record => !filter || Object.values(record).some(value => String(value ?? '').toLowerCase().includes(filter)))
+        .filter(record => !hideZeroPaid || parseFloat(record.total_paid_amount || 0) !== 0)
+        .filter(record => !hideBlankNotes || String(record.notes || '').trim() !== '')
+        .sort((left, right) => String(left.guest_name || '').localeCompare(String(right.guest_name || ''), undefined, { sensitivity: 'base' }) * (nameSort === 'name_desc' ? -1 : 1));
+      const tb = document.getElementById(tbId); tb.innerHTML = '';
+      if(visibleRecords.length === 0) { tb.innerHTML = `<tr><td colspan="10" class="text-center py-6 text-slate-500 italic">No matching records.</td></tr>`; return; }
+      const groupTotals = visibleRecords.reduce((groups, record) => {
+        if (record.order_reference) groups[record.order_reference] = (groups[record.order_reference] || 0) + 1;
+        return groups;
+      }, {});
+      const groupIndexes = {};
+      visibleRecords.forEach(r => {
+        const enc = encodeBookingData(r);
+        const bal = parseFloat(r.balance_due || 0);
+        const paid = parseFloat(r.total_paid_amount || 0);
+        const groupTotal = r.order_reference ? groupTotals[r.order_reference] : 0;
+        const groupIndex = r.order_reference ? (groupIndexes[r.order_reference] = (groupIndexes[r.order_reference] || 0) + 1) : 0;
+        const groupLabel = groupTotal > 1 ? `<span class="ops-note-pill bg-purple-950/70 border border-purple-700/70 text-purple-200">Group: ${r.guest_name} (${groupIndex}/${groupTotal})</span>` : '';
+        const noteLabel = r.notes ? `<span class="ops-note-pill bg-amber-950/70 border border-amber-700/70 text-amber-200" title="${r.notes}">${r.notes}</span>` : (!groupLabel ? '<span class="text-slate-600">&mdash;</span>' : '');
+        const contact = r.telephone || r.email || 'No Contact';
+        const contactTooltip = [r.telephone, r.email].filter(Boolean).join(' · ') || 'No Contact';
+        const dates = `${r.check_in || '-'} <span class="text-slate-600">&rarr;</span> ${r.check_out || '-'} <span class="text-slate-500">(${r.nights || 0}n)</span>`;
+        const status = bal > 0 ? (paid > 0 ? `Deposit ${fmt(bal)}` : `Pending ${fmt(bal)}`) : 'Cleared / Prepaid';
+        const statusClass = bal > 0 ? (paid > 0 ? 'bg-indigo-950/70 border-indigo-700 text-indigo-200' : 'bg-rose-950/70 border-rose-700 text-rose-200') : 'bg-emerald-950/70 border-emerald-700 text-emerald-200';
+        tb.innerHTML += `
+          <tr class="table-row-hover transition" onclick="openUniversalModal('${enc}')">
+            <td class="font-mono font-bold text-slate-200 whitespace-nowrap"><div class="text-[10px]">${r.booking_reference}</div><div class="text-[9px] text-emerald-400 font-sans">${roomLabel(r.room_unit_name)}</div></td>
+            <td class="font-bold text-white text-[11px]">${r.guest_name}</td>
+            <td class="ops-note-cell text-[9px]">${groupLabel}${noteLabel}</td>
+            <td class="ops-contact-cell text-[9px] text-slate-400" title="${escapeHtml(contactTooltip)}"><div>${escapeHtml(contact)}</div></td>
+            <td class="text-[9px] text-slate-400 whitespace-nowrap leading-tight">${dates}</td>
+            <td class="text-slate-300 text-[9px] whitespace-nowrap">${getChannelIcon(r.channel)}${r.channel || 'Direct'}</td>
+            <td class="text-right font-medium text-[10px]">${fmt(r.booked_amount)}</td>
+            <td class="text-right font-medium text-emerald-400 text-[10px]">${fmt(r.total_paid_amount)}</td>
+            <td class="text-right font-bold text-[10px] ${bal>0?'text-amber-400':'text-emerald-400'}">${fmt(bal)}</td>
+            <td class="text-center whitespace-nowrap"><span class="inline-block px-1.5 py-0.5 rounded-full text-[8px] font-bold border ${statusClass}">${status}</span></td>
+          </tr>`;
+      });
+    }
+
+    function filterOpsTable(tbId, value) {
+      const filter = document.getElementById(tbId.replace('-tbody', '-filter'));
+      if (filter && filter.value !== value) filter.value = value;
+      renderOpsTable(tbId, opsTableRecords[tbId] || []);
+    }
+
+    // =======================================================================
+    // CALENDAR VIEW (OTA ICONS & OVERBOOKING STRIPES)
+    // =======================================================================
+    function setCalendarDateFilters() {
+      const from = document.getElementById('cal-from-date');
+      const to = document.getElementById('cal-to-date');
+      const start = new Date(calCurrentDate);
+      const end = new Date(start);
+      end.setDate(end.getDate() + (CAL_DAYS_DISPLAY - 1));
+      if (from) from.value = calendarDateKey(start);
+      if (to) to.value = calendarDateKey(end);
+    }
+    function shiftCalendarDays(days) {
+      calCurrentDate.setDate(calCurrentDate.getDate() + days);
+      setCalendarDateFilters();
+      fetchCalendarGrid();
+    }
+    function resetCalendarToToday() {
+      calCurrentDate = new Date();
+      setCalendarDateFilters();
+      fetchCalendarGrid();
+    }
+    function toggleCanceledCalendarBookings() {
+      showCanceledCalendarBookings = !showCanceledCalendarBookings;
+      const button = document.getElementById('calendar-canceled-toggle');
+      if (button) {
+        button.innerHTML = showCanceledCalendarBookings
+          ? '<i class="fa-solid fa-eye-slash mr-1"></i>Hide Canceled'
+          : '<i class="fa-solid fa-eye mr-1"></i>Show Canceled';
+        button.title = showCanceledCalendarBookings ? 'Hide canceled reservations' : 'Show canceled reservations';
+      }
+      fetchCalendarGrid();
+    }
+    function calendarDateKey(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    async function fetchCalendarGrid() {
+      const container = document.getElementById('calendar-timeline-container');
+      const prop = document.getElementById('cal-property-select')?.value;
+      if (!prop || prop === 'ALL') {
+        container.innerHTML = `<div class="p-10 text-center text-slate-500 italic">Select a specific hotel to view calendar.</div>`;
+        return;
+      }
+      const fromDate = document.getElementById('cal-from-date')?.value || calendarDateKey(calCurrentDate);
+      const toDate = document.getElementById('cal-to-date')?.value || fromDate;
+      const startDate = new Date(`${fromDate}T00:00:00`);
+      const endDate = new Date(`${toDate}T00:00:00`);
+      if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate < startDate) {
+        container.innerHTML = `<div class="p-10 text-center text-rose-300"><i class="fa-solid fa-triangle-exclamation mr-2"></i>Choose a valid date range.</div>`;
+        return;
+      }
+      const requestedDays = Math.floor((endDate - startDate) / 86400000) + 1;
+      if (requestedDays > CAL_DAYS_DISPLAY) {
+        container.innerHTML = `<div class="p-10 text-center text-amber-300"><i class="fa-solid fa-calendar-days mr-2"></i>Please choose a range of ${CAL_DAYS_DISPLAY} days or fewer.</div>`;
+        return;
+      }
+      calCurrentDate = startDate;
+      const dates = [];
+      for (const cursor = new Date(startDate); cursor <= endDate; cursor.setDate(cursor.getDate() + 1)) dates.push(calendarDateKey(cursor));
+      const displayDates = dates.slice(0, CAL_DAYS_DISPLAY);
+      document.getElementById('cal-range-label').textContent = `${dates[0]} → ${dates[dates.length-1]}`;
+      container.innerHTML = `<div class="p-10 text-center text-slate-500"><i class="fa-solid fa-spinner fa-spin mr-2 text-indigo-400"></i>Loading calendar...</div>`;
+
+      try {
+        const res = await fetch(`/api/calendar/feed?property=${encodeURIComponent(prop)}&start_date=${dates[0]}&end_date=${dates[dates.length-1]}`);
+        if (!res.ok) throw new Error(`Calendar request failed (${res.status})`);
+        const data = await res.json();
+        if (!Array.isArray(data.rooms) || !Array.isArray(data.bookings)) throw new Error('Invalid calendar response');
+        if (!showCanceledCalendarBookings) {
+          data.bookings = data.bookings.filter(booking => !['canceled', 'cancelled'].includes(String(booking.booking_status || '').trim().toLowerCase()));
+        }
+        if (data.rooms.length === 0) {
+          container.innerHTML = `<div class="p-10 text-center text-slate-500 italic">No rooms found for ${prop}.</div>`;
+          return;
+        }
+        
+        const calendarWidth = 220 + (displayDates.length * 130);
+        let html = `<div class="calendar-grid-surface flex flex-col border border-slate-800 rounded-xl" style="min-width: ${calendarWidth}px"><div class="calendar-header-row flex bg-slate-950 border-b border-slate-800 text-[10px] font-bold text-slate-400"><div class="calendar-header-room w-56 min-w-[220px] p-2 border-r border-slate-800 uppercase">Unit & Category</div><div class="flex flex-1">`;
+        displayDates.forEach(dStr => {
+          const d = new Date(dStr); html += `<div class="calendar-header-date cal-grid-col p-1.5 text-center border-r border-slate-800/80"><div class="text-[9px] uppercase">${d.toLocaleDateString('en-GB', {weekday:'short'})}</div><div class="text-white">${d.toLocaleDateString('en-GB', {day:'2-digit', month:'short'})}</div></div>`;
+        });
+        html += `</div></div>`;
+
+        (data.rooms || []).forEach((room, rIdx) => {
+          html += `<div class="flex border-b border-slate-800/60 ${rIdx%2===0?'bg-slate-900/40':'bg-slate-900/80'} relative"><div class="calendar-room-cell ${rIdx%2===0?'calendar-room-cell-even':'calendar-room-cell-odd'} w-56 min-w-[220px] p-2 border-r border-slate-800 flex flex-col justify-center"><span class="font-bold text-xs text-white truncate">${room}</span><span class="text-[9px] text-slate-500 font-mono">Standard Category</span></div><div class="flex flex-1 relative h-12">`;
+          displayDates.forEach(() => html += `<div class="cal-grid-col h-full border-r border-slate-800/40"></div>`);
+          
+          let roomBookings = data.bookings.filter(b => b.room_unit_name === room);
+          let endDates = [];
+
+          roomBookings.forEach(bk => {
+            const start = Math.max(0, displayDates.indexOf(bk.check_in));
+            let end = displayDates.indexOf(bk.check_out);
+            if(end === -1) end = displayDates.length;
+            const w = Math.max(1, end - start) * 130;
+            const balDue = parseFloat(bk.balance_due || 0);
+            const totalChgs = parseFloat(bk.total_charges || 0); 
+            const isCanceled = ['canceled', 'cancelled'].includes(String(bk.booking_status || '').trim().toLowerCase());
+
+            // Check overlap for overbooking stripes
+            const bStartTime = new Date(bk.check_in).getTime();
+            let isOverlap = endDates.some(ed => bStartTime < ed);
+            endDates.push(new Date(bk.check_out).getTime());
+
+            // Icons
+            let icons = '';
+            if(balDue > 0) icons += `<span class="ml-1 text-slate-900 font-bold" title="Unpaid Balance">£</span>`;
+            if(totalChgs < 0) icons += `<span class="ml-1 text-emerald-900 font-bold" title="Contains Extra Charges">+£</span>`;
+
+            let otaIcon = getChannelIcon(bk.channel);
+            let noteIconHtml = getNoteIconHtml(bk.notes);
+
+            const bgClass = isCanceled
+              ? `bg-rose-950/80 text-rose-200 border-rose-500/80 ${isOverlap ? 'bg-striped hover-lift mt-5' : 'hover:brightness-110'}`
+              : `bg-orange-500 text-orange-950 border-orange-600 ${isOverlap ? 'bg-striped hover-lift mt-5' : 'hover:brightness-110'}`;
+            const enc = encodeBookingData(bk);
+            const statusIcon = isCanceled ? '<i class="fa-solid fa-ban mr-1 text-rose-300" title="Canceled reservation"></i>' : '';
+            const statusLabel = isCanceled ? 'Canceled - click to edit' : `Open ${bk.guest_name || 'reservation'}`;
+            
+            html += `<div onclick="event.stopPropagation(); openUniversalModal('${enc}')" title="${statusLabel}" style="left: ${start*130 + 3}px; width: ${w - 6}px; top: 6px;" class="calendar-booking absolute h-9 rounded border px-1.5 py-0.5 text-[10px] cursor-pointer shadow-md flex items-center justify-between overflow-hidden transition-all ${bgClass} ${isOverlap ? 'is-overlap' : ''}"><div class="truncate font-bold flex items-center">${statusIcon}${otaIcon} ${bk.guest_name} ${noteIconHtml}</div><div class="text-[9px] shrink-0">${isCanceled ? '<span class="font-bold">CANCELED</span>' : icons}</div></div>`;
+          });
+          html += `</div></div>`;
+        });
+        if (data.bookings.length === 0) html += `<div class="p-5 text-center text-slate-500 text-xs border-t border-slate-800"><i class="fa-regular fa-calendar-xmark mr-1"></i>No bookings in this date range.</div>`;
+        container.innerHTML = html + `</div>`;
+        enableCalendarDragScroll();
+      } catch (err) {
+        console.error('Calendar load failed:', err);
+        container.innerHTML = `<div class="p-10 text-center text-rose-300"><i class="fa-solid fa-triangle-exclamation mr-2"></i>Unable to load calendar data.<div class="text-xs text-slate-500 mt-2">Check the server connection and try Refresh.</div></div>`;
+      }
+    }
+
+    function enableCalendarDragScroll() {
+      const shell = document.getElementById('calendar-scroll-shell');
+      const surface = document.getElementById('calendar-timeline-container');
+      if (!shell || !surface || surface.dataset.dragReady === 'true') return;
+      surface.dataset.dragReady = 'true';
+      let isDragging = false;
+      let startX = 0;
+      let startScrollLeft = 0;
+      surface.addEventListener('pointerdown', event => {
+        if (event.target.closest('.calendar-booking')) return;
+        isDragging = true;
+        startX = event.clientX;
+        startScrollLeft = shell.scrollLeft;
+        surface.classList.add('is-dragging');
+        surface.setPointerCapture(event.pointerId);
+      });
+      surface.addEventListener('pointermove', event => {
+        if (!isDragging) return;
+        shell.scrollLeft = startScrollLeft - (event.clientX - startX);
+      });
+      const stopDragging = event => {
+        if (!isDragging) return;
+        isDragging = false;
+        surface.classList.remove('is-dragging');
+        if (surface.hasPointerCapture(event.pointerId)) surface.releasePointerCapture(event.pointerId);
+      };
+      surface.addEventListener('pointerup', stopDragging);
+      surface.addEventListener('pointercancel', stopDragging);
+    }
+
+    // =======================================================================
+    // EXECUTIVE ANALYTICS LOGIC
+    // =======================================================================
+    function getOverviewParams() {
+      const propEl = document.getElementById('kpi-property');
+      const fromEl = document.getElementById('kpi-from-date');
+      const toEl = document.getElementById('kpi-to-date');
+      let query = `property=${encodeURIComponent(propEl?.value||'ALL')}`;
+      if (fromEl?.value && toEl?.value) query += `&from_date=${fromEl.value}&to_date=${toEl.value}`;
+      return query;
+    }
+
+    function aiReportPayload() {
+      return {
+        type: currentAiReport.type,
+        prompt: document.getElementById('ai-copilot-input')?.value || '',
+        property: document.getElementById('ai-report-property')?.value || 'ALL',
+        from_date: document.getElementById('ai-report-from')?.value || '',
+        to_date: document.getElementById('ai-report-to')?.value || ''
+      };
+    }
+
+    function addCopilotMessage(text, tone = 'slate') {
+      const messages = document.getElementById('ai-copilot-messages');
+      const color = tone === 'cyan' ? 'text-cyan-200 border-cyan-500/30' : 'text-slate-300 border-slate-800';
+      messages.innerHTML += `<div class="bg-slate-950 border ${color} rounded-lg p-2.5 text-[11px]">${escapeHtml(text)}</div>`;
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    async function askAiCopilot() {
+      const input = document.getElementById('ai-copilot-input');
+      const prompt = input.value.trim();
+      if (!prompt) return;
+      addCopilotMessage(prompt, 'cyan');
+      input.value = '';
+      await runAiReport(prompt);
+    }
+
+    async function runAiReport(prompt = '') {
+      const payload = { ...aiReportPayload(), prompt };
+      const body = document.getElementById('ai-report-brief-body');
+      body.innerHTML = '<span class="text-cyan-300"><i class="fa-solid fa-spinner fa-spin mr-1"></i>Auditing the selected ledger...</span>';
+      try {
+        const response = await fetch('/api/ai-reports/query', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Report query failed.');
+        currentAiReport = { ...data, type: data.reportType };
+        renderAiReport(data);
+        if (prompt) addCopilotMessage(`${data.title} is ready. ${data.brief.headline}`, 'slate');
+      } catch (error) {
+        body.innerHTML = `<span class="text-rose-300"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${escapeHtml(error.message)}</span>`;
+      }
+    }
+
+    function renderAiReport(data) {
+      setElText('ai-report-title', data.title);
+      setElText('ai-report-count', `${data.rows.length} row${data.rows.length === 1 ? '' : 's'}`);
+      const brief = data.brief;
+      document.getElementById('ai-report-brief-body').innerHTML = `<div class="font-semibold text-white">${escapeHtml(brief.headline)}</div><div class="mt-1 text-slate-400">${escapeHtml(brief.summary)}</div><div class="mt-2 ${brief.warnings.length ? 'text-amber-300' : 'text-emerald-300'}"><i class="fa-solid ${brief.warnings.length ? 'fa-triangle-exclamation' : 'fa-circle-check'} mr-1"></i>${escapeHtml(brief.auditStatus)}</div>${brief.warnings.length ? `<ul class="mt-2 list-disc list-inside text-amber-200/80">${brief.warnings.map(warning => `<li>${escapeHtml(warning)}</li>`).join('')}</ul>` : ''}`;
+      const rowColumns = data.rows.length ? Object.keys(data.rows[0]) : (data.columns || []);
+      currentAiReport.columns = rowColumns;
+      document.getElementById('ai-report-thead').innerHTML = `<tr>${rowColumns.map(column => `<th class="px-3 py-2 whitespace-nowrap">${escapeHtml(column)}</th>`).join('')}</tr>`;
+      document.getElementById('ai-report-tbody').innerHTML = data.rows.length ? data.rows.map(row => `<tr>${rowColumns.map(column => `<td class="px-3 py-2 whitespace-nowrap">${escapeHtml(row[column] == null ? '' : row[column])}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${Math.max(rowColumns.length, 1)}" class="p-8 text-center text-slate-500">No records matched this report.</td></tr>`;
+      renderAiChart();
+    }
+
+    function renderAiChart() {
+      const canvas = document.getElementById('aiReportChart');
+      if (!canvas || !currentAiReport.rows.length) return;
+      if (aiReportChartInstance) aiReportChartInstance.destroy();
+      const columns = currentAiReport.columns;
+      const numericColumns = columns.filter(column => currentAiReport.rows.some(row => row[column] !== null && row[column] !== '' && Number.isFinite(Number(row[column]))));
+      const labelColumn = columns.find(column => !numericColumns.includes(column)) || columns[0];
+      const valueColumn = numericColumns[0];
+      if (!valueColumn) return;
+      aiReportChartInstance = new Chart(canvas, { type: document.getElementById('ai-chart-type').value, data: { labels: currentAiReport.rows.slice(0, 20).map(row => String(row[labelColumn] ?? 'Unknown')), datasets: [{ label: valueColumn, data: currentAiReport.rows.slice(0, 20).map(row => Number(row[valueColumn]) || 0), backgroundColor: ['#22d3ee', '#34d399', '#fbbf24', '#fb7185', '#818cf8', '#a78bfa'], borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } }, scales: document.getElementById('ai-chart-type').value === 'pie' ? {} : { x: { ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { color: '#1e293b' } }, y: { ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { color: '#1e293b' } } } } });
+    }
+
+    function downloadAiReportPdf() {
+      const report = document.getElementById('tab-content-ai-reports');
+      if (!report || !currentAiReport.rows.length) return alert('Run a report first.');
+      report.classList.add('print-area');
+      window.print();
+      setTimeout(() => report.classList.remove('print-area'), 500);
+    }
+
+    function sendAiReportEmail() {
+      if (!currentAiReport.rows.length) return alert('Run a report first.');
+      const subject = encodeURIComponent(`${currentAiReport.title} - Eviivo AI Reports`);
+      const body = encodeURIComponent(`${document.getElementById('ai-report-brief-body').innerText}\n\nRows: ${currentAiReport.rows.length}`);
+      window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    }
+
+    async function copyAiReportText() {
+      if (!currentAiReport.rows.length) return alert('Run a report first.');
+      const headers = currentAiReport.columns.join('\t');
+      const rows = currentAiReport.rows.map(row => currentAiReport.columns.map(column => row[column] ?? '').join('\t')).join('\n');
+      await navigator.clipboard.writeText(`${document.getElementById('ai-report-brief-body').innerText}\n\n${headers}\n${rows}`);
+      addCopilotMessage('Report text copied to the clipboard.');
+    }
+
+    function saveAiSearch() {
+      localStorage.setItem('eviivo-ai-report-search', JSON.stringify(aiReportPayload()));
+      addCopilotMessage('Search saved on this device.');
+    }
+
+    const taskSchemaTables = { in_out: 'bookings', cash: 'payments', card: 'payments' };
+    let taskSchemaColumns = {};
+    let taskMapping = [];
+    let taskPresets = [];
+
+    function defaultTaskMapping(task) {
+      const columns = taskSchemaColumns[task] || [];
+      return columns.map((source, index) => ({ header: source.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase()), mode: 'column', source, expression: '', isKey: index === 0 }));
+    }
+
+    function renderTaskMapping() {
+      const body = document.getElementById('task-mapping-body');
+      const columns = taskSchemaColumns[document.getElementById('task-type').value] || [];
+      body.innerHTML = taskMapping.map((item, index) => `<tr><td class="px-3 py-2"><input value="${escapeHtml(item.header)}" onchange="updateTaskMapping(${index}, 'header', this.value)" class="w-full min-w-[130px] bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white"></td><td class="px-3 py-2"><select onchange="updateTaskMapping(${index}, 'mode', this.value)" class="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white"><option value="column" ${item.mode === 'column' ? 'selected' : ''}>DB column</option><option value="calculated" ${item.mode === 'calculated' ? 'selected' : ''}>Calculated / combined</option></select></td><td class="px-3 py-2">${item.mode === 'calculated' ? `<input value="${escapeHtml(item.expression || '')}" placeholder="property_name + room_unit_name" onchange="updateTaskMapping(${index}, 'expression', this.value)" class="w-full min-w-[220px] bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white">` : `<select onchange="updateTaskMapping(${index}, 'source', this.value)" class="w-full min-w-[160px] bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white">${columns.map(column => `<option value="${column}" ${item.source === column ? 'selected' : ''}>${column}</option>`).join('')}</select>`}</td><td class="px-3 py-2 text-center"><input type="radio" name="task-key" ${item.isKey ? 'checked' : ''} onchange="setTaskKey(${index})" title="Use this column as the unique upsert key"></td><td class="px-3 py-2 text-right"><button onclick="removeTaskMappingRow(${index})" class="text-rose-300 hover:text-rose-200" title="Remove mapped column"><i class="fa-solid fa-trash"></i></button></td></tr>`).join('');
+    }
+
+    function updateTaskMapping(index, field, value) { taskMapping[index][field] = value; if (field === 'mode' && value === 'column') taskMapping[index].source = (taskSchemaColumns[document.getElementById('task-type').value] || [])[0]; renderTaskMapping(); previewTaskData(); }
+    function setTaskKey(index) { taskMapping.forEach((item, itemIndex) => { item.isKey = itemIndex === index; }); renderTaskMapping(); }
+    function addTaskMappingRow() { taskMapping.push({ header: 'New Column', mode: 'column', source: (taskSchemaColumns[document.getElementById('task-type').value] || [])[0], expression: '', isKey: false }); renderTaskMapping(); }
+    function removeTaskMappingRow(index) { if (taskMapping[index].isKey && taskMapping.length > 1) taskMapping[0].isKey = true; taskMapping.splice(index, 1); renderTaskMapping(); previewTaskData(); }
+
+    async function loadTaskWorkspace() {
+      const task = document.getElementById('task-type').value;
+      await loadTaskSchema(task);
+      taskMapping = defaultTaskMapping(task);
+      renderTaskMapping();
+      await loadTaskPresets();
+      previewTaskData();
+    }
+
+    async function loadTaskSchema(task) {
+      const table = taskSchemaTables[task];
+      try { const response = await fetch(`/api/schema/${table}`); const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Unable to load live schema.'); taskSchemaColumns[task] = result.columns.map(column => column.column_name); } catch (error) { taskSchemaColumns[task] = []; setElText('task-status', error.message); }
+    }
+
+    async function loadTaskPresets() {
+      const task = document.getElementById('task-type').value;
+      try { const response = await fetch(`/api/daily-tasks/presets?task=${encodeURIComponent(task)}`); taskPresets = await response.json(); const select = document.getElementById('task-preset-select'); select.innerHTML = '<option value="">Saved presets</option>' + taskPresets.map(preset => `<option value="${preset.preset_id}">${escapeHtml(preset.preset_name)}</option>`).join(''); } catch (error) { setElText('task-status', error.message); }
+    }
+
+    function loadSelectedTaskPreset() { const preset = taskPresets.find(item => String(item.preset_id) === document.getElementById('task-preset-select').value); if (preset) { taskMapping = preset.mapping; renderTaskMapping(); previewTaskData(); } }
+
+    async function saveTaskPreset() {
+      const name = document.getElementById('task-preset-name').value.trim();
+      if (!name) return alert('Enter a preset name.');
+      try { const response = await fetch('/api/daily-tasks/presets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task: document.getElementById('task-type').value, name, mapping: taskMapping }) }); const result = await response.json(); if (!response.ok) throw new Error(result.error); setElText('task-status', `Preset '${result.preset_name}' saved.`); await loadTaskPresets(); } catch (error) { setElText('task-status', error.message); }
+    }
+
+    async function previewTaskData() {
+      const task = document.getElementById('task-type')?.value; const preview = document.getElementById('task-preview'); if (!task || !preview) return;
+      try { const response = await fetch('/api/daily-tasks/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task, property: document.getElementById('task-property').value, date: document.getElementById('task-date').value, mapping: taskMapping }) }); const result = await response.json(); if (!response.ok) throw new Error(result.error); preview.innerHTML = result.mappedRows.length ? `<table class="w-full"><thead><tr>${taskMapping.map(item => `<th class="text-left border-b border-slate-700 p-1 whitespace-nowrap">${escapeHtml(item.header)}</th>`).join('')}</tr></thead><tbody>${result.mappedRows.slice(0, 10).map(row => `<tr>${row.map(value => `<td class="border-b border-slate-800 p-1 whitespace-nowrap">${escapeHtml(value)}</td>`).join('')}</tr>`).join('')}</tbody></table>` : '<div class="p-4 text-center text-slate-500">No data for this task date.</div>'; } catch (error) { preview.innerHTML = `<div class="text-rose-300 p-2">${escapeHtml(error.message)}</div>`; }
+    }
+
+    async function syncDailyTask() {
+      const status = document.getElementById('task-status'); status.textContent = 'Syncing task...';
+      try { const response = await fetch('/api/daily-tasks/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task: document.getElementById('task-type').value, property: document.getElementById('task-property').value, date: document.getElementById('task-date').value, mapping: taskMapping, preset_id: document.getElementById('task-preset-select').value || null }) }); const result = await response.json(); if (!response.ok) throw new Error(result.error); status.textContent = `${result.task}: ${result.updated} updated, ${result.inserted} inserted, ${result.skipped} skipped. Upsert key: ${result.key}.`; } catch (error) { status.textContent = error.message; }
+    }
+    
+    function clearOverviewDates() { document.getElementById('kpi-from-date').value = ''; document.getElementById('kpi-to-date').value = ''; loadAllAnalytics(); }
+
+    async function loadAllAnalytics() {
+      try {
+        const res = await fetch(`/api/kpis?${getOverviewParams()}`);
+        const d = await res.json();
+        setElText('kpi-gross', fmt(d.total_booked_revenue));
+        setElText('kpi-collected', fmt(d.total_collected_revenue));
+        setElText('kpi-outstanding', fmt(d.total_outstanding_balance));
+        setElText('kpi-bookings-count', `${d.total_bookings || 0} bookings`);
+        const booked = parseFloat(d.total_booked_revenue || 0);
+        const collected = parseFloat(d.total_collected_revenue || 0);
+        setElText('kpi-collection-rate', `${booked > 0 ? ((collected / booked) * 100).toFixed(1) : 0}% settlement`);
+        setElText('kpi-unpaid-stats', `${d.unpaid_count || 0} unpaid / ${d.partially_paid_count || 0} partial`);
+        setElText('kpi-settled-count', d.fully_paid_count || 0);
+        
+        loadCharts();
+        fetchReconciliation(0);
+      } catch(e) {}
+    }
+
+    async function loadCharts() {
+      try {
+        const res = await fetch(`/api/reports/charts?${getOverviewParams()}`);
+        const { monthly, channels } = await res.json();
+        
+        const mCanvas = document.getElementById('monthlyChart');
+        if (mCanvas) {
+          if (monthlyChartInstance) monthlyChartInstance.destroy();
+          monthlyChartInstance = new Chart(mCanvas, {
+            type: 'bar',
+            data: {
+              labels: (monthly || []).map(m => m.check_in_month),
+              datasets: [
+                { label: 'Booked', data: (monthly || []).map(m => parseFloat(m.revenue || 0)), backgroundColor: '#3b82f6', borderRadius: 4 },
+                { label: 'Collected', data: (monthly || []).map(m => parseFloat(m.collected || 0)), backgroundColor: '#10b981', borderRadius: 4 },
+                { label: 'Unpaid', data: (monthly || []).map(m => parseFloat(m.unpaid || 0)), backgroundColor: '#f59e0b', borderRadius: 4 }
+              ]
+            },
+            options: { responsive: true, maintainAspectRatio: false, scales: { x: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8', font: {size: 9} } }, y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8', font: {size: 9} } } }, plugins: { legend: { labels: { color: '#94a3b8', boxWidth: 10, font: {size: 10} } } } }
+          });
+        }
+
+        const cCanvas = document.getElementById('channelChart');
+        if (cCanvas) {
+          if (channelChartInstance) channelChartInstance.destroy();
+          channelChartInstance = new Chart(cCanvas, {
+            type: 'bar',
+            data: {
+              labels: (channels || []).map(c => c.channel || 'Direct'),
+              datasets: [{ data: (channels || []).map(c => parseFloat(c.revenue || 0)), backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'], borderRadius: 4 }]
+            },
+            options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8', font: {size: 9} } }, y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8', font: {size: 9} } } } }
+          });
+        }
+      } catch (err) {}
+    }
+
+    async function fetchReconciliation(offset = 0) {
+      currentOffset = offset;
+      const status = document.getElementById('filter-status')?.value || 'ALL';
+      const search = document.getElementById('filter-search')?.value || '';
+      const nameSort = document.getElementById('recon-name-sort')?.value || 'name_asc';
+      const hideZeroPaid = document.getElementById('recon-hide-zero-paid')?.checked ? 'true' : 'false';
+      const hideBlankNotes = document.getElementById('recon-hide-blank-notes')?.checked ? 'true' : 'false';
+      try {
+        const res = await fetch(`/api/reports/reconciliation?limit=${limit}&offset=${currentOffset}&status=${status}&search=${encodeURIComponent(search)}&name_sort=${nameSort}&hide_zero_paid=${hideZeroPaid}&hide_blank_notes=${hideBlankNotes}&${getOverviewParams()}`);
+        const { total, data } = await res.json();
+        const tb = document.getElementById('recon-tbody'); tb.innerHTML = '';
+        data.forEach(r => {
+          const enc = encodeBookingData(r);
+          let bc = 'bg-slate-800 text-slate-400 border-slate-700';
+          if(r.payment_status==='Fully Paid') bc='bg-emerald-950 text-emerald-400 border-emerald-800/60';
+          if(r.payment_status==='Partially Paid') bc='bg-amber-950 text-amber-400 border-amber-800/60';
+          if(r.payment_status==='Unpaid') bc='bg-rose-950 text-rose-400 border-rose-800/60';
+          tb.innerHTML += `
+            <tr class="table-row-hover transition" onclick="openUniversalModal('${enc}')">
+              <td>${r.property_name||'-'}</td>
+              <td class="font-mono text-emerald-400 font-semibold">${r.booking_reference}</td>
+              <td class="max-w-[150px] truncate" title="${r.notes||''}">${r.guest_name} <span class="text-[9px] text-slate-500">${r.notes?' - '+r.notes:''}</span></td>
+              <td class="text-[10px] text-slate-400">${r.check_in?.split('T')[0]}</td>
+              <td class="text-right">${fmt(r.booked_amount)}</td>
+              <td class="text-right text-emerald-400">${fmt(r.total_paid_amount)}</td>
+              <td class="text-right font-bold ${r.balance_due>0?'text-rose-400':'text-slate-400'}">${fmt(r.balance_due)}</td>
+              <td class="text-center"><span class="px-1.5 py-0.5 text-[9px] font-semibold rounded border ${bc}">${r.payment_status}</span></td>
+            </tr>`;
+        });
+        setElText('pagination-info', `Showing ${offset+1}-${Math.min(offset+limit, total)} of ${total}`);
+      } catch(e) {}
+    }
+    function changePage(d) { fetchReconciliation(currentOffset + (d*limit)); }
+    function debounceSearch() { clearTimeout(searchTimer); searchTimer = setTimeout(() => fetchReconciliation(0), 300); }
+
+    // =======================================================================
+    // ZOHO CLIQ & GLOBAL SEARCH
+    // =======================================================================
+    async function sendToZohoCliq() {
+      const property = document.getElementById('ops-property').value;
+      const date = document.getElementById('ops-date').value;
+      if (!date) return alert('Select a date first.');
+
+      try {
+        const opsRes = await fetch(`/api/operations/daily?property=${encodeURIComponent(property)}&date=${date}`);
+        const opsData = await opsRes.json();
+
+        const response = await fetch('/api/operations/send-cliq', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ property: property, date: date, arrivals: opsData.arrivals || [], departures: opsData.departures || [] })
+        });
+        const result = await response.json();
+        alert(`✅ ${result.message}`);
+      } catch (err) { alert(`❌ Zoho Error: ${err.message}`); }
+    }
+
+    function copyCliqFormat() {
+      const hotel = document.getElementById('ops-property')?.value || 'Property Handover';
+      const date = document.getElementById('ops-date')?.value || '';
+      const text = `🏨 Daily Handover - ${hotel}\n📅 Date: ${date}`;
+      navigator.clipboard.writeText(text).then(() => alert('✅ Copied!'));
+    }
+
+    function debounceGlobalSearch() {
+      clearTimeout(globalSearchTimer);
+      const val = document.getElementById('global-booking-search').value.trim();
+      const clearBtn = document.getElementById('clear-search-btn');
+      if (val) { clearBtn.classList.remove('hidden'); globalSearchTimer = setTimeout(() => executeGlobalSearch(val), 300); } 
+      else { clearBtn.classList.add('hidden'); closeSearchDropdown(); }
+    }
+    function clearGlobalSearch() { document.getElementById('global-booking-search').value = ''; document.getElementById('clear-search-btn').classList.add('hidden'); closeSearchDropdown(); }
+    function closeSearchDropdown() { const d = document.getElementById('search-dropdown-results'); d.classList.add('hidden'); d.innerHTML = ''; }
+
+    async function executeGlobalSearch(query) {
+      const d = document.getElementById('search-dropdown-results');
+      d.innerHTML = `<div class="p-2 text-center text-xs text-slate-400"><i class="fa-solid fa-spinner fa-spin"></i> Searching...</div>`;
+      d.classList.remove('hidden');
+      try {
+        const res = await fetch(`/api/bookings/search?q=${encodeURIComponent(query)}`);
+        const results = await res.json();
+        if (results.length === 0) { d.innerHTML = `<div class="p-3 text-center text-xs text-slate-400">No bookings found.</div>`; return; }
+        d.innerHTML = `<div class="px-3 py-1 bg-slate-950 text-[9px] font-bold text-slate-400 uppercase">Results (${results.length})</div>`;
+        results.forEach(item => {
+          const enc = encodeBookingData(item);
+          const bal = parseFloat(item.balance_due || 0);
+          d.innerHTML += `
+            <div class="p-2 hover:bg-slate-800 cursor-pointer flex justify-between text-[11px] border-b border-slate-800" onclick="openUniversalModal('${enc}')">
+              <div>
+                <div class="font-bold text-white text-xs">${item.guest_name}</div>
+                <div class="text-slate-400 font-mono text-[9px] mt-0.5">${item.booking_reference}</div>
+                <div class="text-emerald-400 text-[9px] mt-0.5"><i class="fa-solid fa-hotel mr-1"></i>${item.property_name} - ${item.room_unit_name}</div>
+              </div>
+              <div class="text-right">
+                <div class="font-bold text-xs">${fmt(item.booked_amount)}</div>
+                <div class="${bal>0?'text-amber-400':'text-emerald-400'} text-[10px] font-semibold mt-1">${bal>0?'Due '+fmt(bal):'Settled'}</div>
+              </div>
+            </div>`;
+        });
+      } catch (err) { d.innerHTML = `<div class="p-2 text-xs text-rose-400">Error</div>`; }
+    }
+
+    // =======================================================================
+    // CAPTURE SCREENSHOTS LOGIC (HTML2CANVAS)
+    // =======================================================================
+    async function captureUltraScreenshot(elementId, filePrefix, customHotel = null) {
+      const element = document.getElementById(elementId);
+      if (!element) return;
+
+      const date = document.getElementById('ops-date')?.value || 'report';
+      const propSelect = document.getElementById('ops-property');
+      const property = customHotel ? customHotel.replace(/[^A-Za-z0-9_-]/g, '_') : (propSelect ? propSelect.value.replace(/[^A-Za-z0-9_-]/g, '_') : 'all');
+      const isLightTheme = document.documentElement.classList.contains('light-mode');
+
+      const captureCopy = element.cloneNode(true);
+      captureCopy.querySelectorAll('.hide-on-screenshot').forEach(item => item.remove());
+      captureCopy.querySelectorAll('.overflow-x-auto, .overflow-hidden').forEach(item => {
+        item.style.overflow = 'visible';
+        item.style.overflowX = 'visible';
+        item.style.overflowY = 'visible';
+      });
+      captureCopy.style.position = 'fixed';
+      captureCopy.style.left = '-100000px';
+      captureCopy.style.top = '0';
+      captureCopy.style.width = `${Math.max(element.scrollWidth, element.offsetWidth)}px`;
+      captureCopy.style.maxWidth = 'none';
+      captureCopy.style.zIndex = '-1';
+      captureCopy.style.pointerEvents = 'none';
+      document.body.appendChild(captureCopy);
+
+      try {
+        const canvas = await html2canvas(captureCopy, { backgroundColor: isLightTheme ? '#f1f5f9' : '#0f172a', scale: 3, useCORS: true, logging: false });
+        const link = document.createElement('a');
+        link.href = canvas.toDataURL('image/png', 1.0);
+        link.download = `${property}-${filePrefix}-${date}.png`;
+        link.click();
+      } catch (err) {
+        console.error('Screenshot error:', err);
+      } finally {
+        captureCopy.remove();
+      }
+    }
+
+    async function downloadAllHotelsScreenshots() {
+      const date = document.getElementById('ops-date')?.value;
+      if (!date) return alert('Select a date first.');
+      if (!globalPropertiesList || globalPropertiesList.length === 0) return alert('No properties.');
+
+      const originalSelectedHotel = document.getElementById('ops-property').value;
+      try {
+        for (let i = 0; i < globalPropertiesList.length; i++) {
+          const hotel = globalPropertiesList[i];
+          document.getElementById('ops-property').value = hotel;
+          await fetchDailyOps();
+          await new Promise(r => setTimeout(r, 600));
+
+          await captureUltraScreenshot('zoho-cliq-card', 'Snapshot', hotel);
+          await new Promise(r => setTimeout(r, 400));
+          await captureUltraScreenshot('arrivals-capture-area', 'Arrivals', hotel);
+          await new Promise(r => setTimeout(r, 400));
+          await captureUltraScreenshot('departures-capture-area', 'Departures', hotel);
+          await new Promise(r => setTimeout(r, 400));
+        }
+        alert(`✅ All screenshots downloaded successfully!`);
+      } catch (err) {
+        alert(`❌ Batch Error: ${err.message}`);
+      } finally {
+        document.getElementById('ops-property').value = originalSelectedHotel;
+        await fetchDailyOps();
+      }
+    }
+  </script>
+</body>
+</html>
