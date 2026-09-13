@@ -4,12 +4,74 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const pool = require('./db');
-let google;
-try { google = require('googleapis').google; } catch (err) { google = null; }
+const { google } = require('googleapis');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const GOOGLE_SHEETS_SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
+const GOOGLE_SHEETS_READONLY_SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly'];
+const ROOT_GOOGLE_CREDENTIALS = path.resolve(__dirname, '..', './credentials.json');
+const googleSheetsClients = new Map();
+
+function loadGoogleServiceAccount(keyFile) {
+  let credentials;
+  try {
+    credentials = JSON.parse(fs.readFileSync(keyFile, 'utf8'));
+  } catch (error) {
+    throw new Error(`Unable to read Google credentials from ${keyFile}: ${error.message}`);
+  }
+
+  const clientEmail = String(credentials.client_email || '').trim();
+  const privateKey = String(credentials.private_key || '').replace(/\\n/g, '\n').replace(/\r\n/g, '\n').trim();
+  if (credentials.type !== 'service_account' || !clientEmail || !privateKey) {
+    throw new Error(`Invalid service-account credentials in ${keyFile}: type, client_email, and private_key are required.`);
+  }
+  if (!privateKey.startsWith('-----BEGIN PRIVATE KEY-----') || !privateKey.endsWith('-----END PRIVATE KEY-----')) {
+    throw new Error(`Invalid private_key format in ${keyFile}: expected a complete PRIVATE KEY PEM block.`);
+  }
+  if (privateKey.includes('\\n')) {
+    throw new Error(`Invalid private_key format in ${keyFile}: escaped newlines were not normalized.`);
+  }
+
+  return { client_email: clientEmail, private_key: privateKey };
+}
+
+async function getGoogleSheetsClient(scopes = GOOGLE_SHEETS_SCOPES) {
+  const scopeKey = scopes.join(' ');
+  if (googleSheetsClients.has(scopeKey)) return googleSheetsClients.get(scopeKey);
+
+  const configuredPath = String(process.env.GOOGLE_APPLICATION_CREDENTIALS || '').trim();
+  const candidatePaths = [
+    configuredPath,
+    ROOT_GOOGLE_CREDENTIALS,
+    path.resolve(__dirname, '..', 'google-credentials.json.json')
+  ].filter(Boolean);
+  const keyFile = candidatePaths.find(candidate => fs.existsSync(candidate));
+  if (!keyFile) {
+    const configuredHint = configuredPath ? `Configured path does not exist: ${configuredPath}` : 'GOOGLE_APPLICATION_CREDENTIALS is not set';
+    throw new Error(`Missing credentials.json file or GOOGLE_APPLICATION_CREDENTIALS env variable. ${configuredHint}`);
+  }
+
+  const clientPromise = (async () => {
+    try {
+      const credentials = loadGoogleServiceAccount(keyFile);
+      const auth = new google.auth.GoogleAuth({ credentials, scopes });
+      await auth.getClient();
+      return google.sheets({ version: 'v4', auth });
+    } catch (error) {
+      throw new Error(`Google Sheets authentication failed using ${keyFile}: ${error.message}`);
+    }
+  })();
+  googleSheetsClients.set(scopeKey, clientPromise);
+  try {
+    return await clientPromise;
+  } catch (error) {
+    googleSheetsClients.delete(scopeKey);
+    throw error;
+  }
+}
 
 app.use(cors());
 app.use(express.json());
@@ -48,6 +110,44 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (task_type, preset_name)
       );
+      DELETE FROM bookings
+      WHERE LOWER(TRIM(COALESCE(booking_status, ''))) IN ('canceled', 'cancelled')
+        AND COALESCE(total_revenue, 0) = 0
+        AND COALESCE(paid_amount, 0) = 0;
+      CREATE INDEX IF NOT EXISTS idx_bookings_check_in ON bookings(check_in);
+      CREATE INDEX IF NOT EXISTS idx_bookings_check_out ON bookings(check_out);
+      ALTER TABLE bookings ADD COLUMN IF NOT EXISTS address_line TEXT;
+      ALTER TABLE bookings ADD COLUMN IF NOT EXISTS city VARCHAR(120);
+      ALTER TABLE bookings ADD COLUMN IF NOT EXISTS postcode VARCHAR(30);
+      CREATE TABLE IF NOT EXISTS reservation_charges (
+        charge_id SERIAL PRIMARY KEY,
+        booking_reference VARCHAR(100) NOT NULL,
+        category VARCHAR(100) NOT NULL DEFAULT 'Ad Hoc',
+        description TEXT NOT NULL,
+        amount NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
+        charge_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_charges_booking_ref ON reservation_charges(booking_reference);
+      CREATE TABLE IF NOT EXISTS booking_cards (
+        card_id SERIAL PRIMARY KEY,
+        booking_reference VARCHAR(100) NOT NULL,
+        cardholder_name VARCHAR(255) NOT NULL,
+        card_brand VARCHAR(50),
+        last_four VARCHAR(4),
+        expiry_month VARCHAR(2),
+        expiry_year VARCHAR(4),
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS booking_messages (
+        message_id SERIAL PRIMARY KEY,
+        booking_reference VARCHAR(100) NOT NULL,
+        message_type VARCHAR(40) NOT NULL DEFAULT 'Internal Note',
+        message_text TEXT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_booking_cards_ref ON booking_cards(booking_reference);
+      CREATE INDEX IF NOT EXISTS idx_booking_messages_ref ON booking_messages(booking_reference);
     `);
     console.log('✅ DB Schema Synchronized (Payments, Corporate & Notes).');
   } catch (err) {
@@ -66,6 +166,8 @@ const DISTRIBUTED_CTE = `
            COUNT(*) AS group_total_rooms
     FROM bookings
     WHERE order_reference IS NOT NULL AND TRIM(order_reference) != ''
+      AND NOT (LOWER(TRIM(COALESCE(booking_status, ''))) IN ('canceled', 'cancelled')
+        AND COALESCE(total_revenue, 0) = 0 AND COALESCE(paid_amount, 0) = 0)
     GROUP BY order_reference
   ),
   distributed_bookings AS (
@@ -78,21 +180,127 @@ const DISTRIBUTED_CTE = `
            END AS distributed_paid_amount
     FROM bookings b
     LEFT JOIN group_aggregates ga ON b.order_reference = ga.order_reference
+    WHERE NOT (LOWER(TRIM(COALESCE(b.booking_status, ''))) IN ('canceled', 'cancelled')
+      AND COALESCE(b.total_revenue, 0) = 0 AND COALESCE(b.paid_amount, 0) = 0)
   )
 `;
 
 const sharedSelectSQL = `
   b.booking_reference, b.order_reference, b.property_name, b.company_name, b.company_vat,
-  CONCAT_WS(' ', b.guest_first_name, b.guest_last_name) AS guest_name, 
-  b.telephone, b.email, b.room_unit_name, 
+  b.guest_first_name, b.guest_last_name, CONCAT_WS(' ', b.guest_first_name, b.guest_last_name) AS guest_name, 
+  b.telephone, b.email, b.room_unit_name, b.room_unit_type,
   TO_CHAR(b.check_in, 'YYYY-MM-DD') AS check_in, TO_CHAR(b.check_out, 'YYYY-MM-DD') AS check_out,
-  b.nights, COALESCE(b.channel, 'Direct') AS channel, b.booking_status, b.total_revenue::numeric AS booked_amount,
+  b.nights, b.adults, b.children, b.booking_date, b.raw_data, b.other_revenue::numeric AS other_revenue, b.address_line, b.city, b.postcode, COALESCE(b.channel, 'Direct') AS channel, b.booking_status, b.total_revenue::numeric AS booked_amount,
   b.distributed_paid_amount::numeric AS total_paid_amount, 
   ROUND((b.total_revenue::numeric - b.distributed_paid_amount)::numeric, 2) AS balance_due,
   COALESCE(NULLIF(b.notes, ''), b.booking_notes, '') AS notes, 
-  (SELECT COALESCE(json_agg(p ORDER BY p.payment_date DESC), '[]'::json) FROM reservation_payments p WHERE p.booking_reference = b.booking_reference) AS payment_history,
-  (SELECT COALESCE(SUM(amount), 0) FROM reservation_payments p WHERE p.booking_reference = b.booking_reference AND amount < 0) AS total_charges
+  (SELECT COALESCE(json_agg(payment ORDER BY payment_date DESC NULLS LAST, ledger_id DESC), '[]'::json)
+   FROM (
+     SELECT CONCAT('manual-', p.payment_id) AS ledger_id, p.payment_id, p.payment_date,
+            p.amount, COALESCE(NULLIF(p.payment_method, ''), 'Manual Entry') AS payment_method,
+            COALESCE(NULLIF(p.description, ''), 'Manual ledger entry') AS description, 'manual' AS source
+     FROM reservation_payments p
+     WHERE p.booking_reference = b.booking_reference
+     UNION ALL
+     SELECT CONCAT('imported-', p.payment_id, '-', p.booking_reference) AS ledger_id, NULL::integer AS payment_id,
+            COALESCE(p.payment_date, p.received_date_time) AS payment_date, p.amount,
+            COALESCE(NULLIF(p.payment_method, ''), NULLIF(p.payment_type, ''), 'Imported payment') AS payment_method,
+            COALESCE(NULLIF(p.raw_data->>'Description', ''), NULLIF(p.raw_data->>'Payment Description', ''), NULLIF(p.payment_type, ''), NULLIF(p.payment_status, ''), 'Payments Received import') AS description,
+            'imported' AS source
+     FROM payments p
+     WHERE p.booking_reference = b.booking_reference
+   ) payment) AS payment_history,
+  (SELECT COALESCE(SUM(amount), 0) FROM reservation_payments p WHERE p.booking_reference = b.booking_reference AND amount < 0 AND p.payment_method NOT IN ('Waive/Discount', 'Deposit Waive/Discount')) + (SELECT COALESCE(SUM(amount), 0) FROM reservation_charges c WHERE c.booking_reference = b.booking_reference) AS total_charges,
+  (SELECT COALESCE(SUM(amount), 0) FROM reservation_payments p WHERE p.booking_reference = b.booking_reference AND p.payment_method = 'Waive/Discount') AS total_waivers,
+  (SELECT COALESCE(SUM(amount), 0) FROM reservation_payments p WHERE p.booking_reference = b.booking_reference AND p.payment_method = 'Deposit Waive/Discount') AS total_deposit_waivers,
+  GREATEST(COALESCE(b.other_revenue::numeric, 0) - ABS((SELECT COALESCE(SUM(amount), 0) FROM reservation_payments p WHERE p.booking_reference = b.booking_reference AND p.payment_method = 'Deposit Waive/Discount')), 0) AS deposit_balance,
+  ABS((SELECT COALESCE(SUM(amount), 0) FROM reservation_payments p WHERE p.booking_reference = b.booking_reference AND p.payment_method = 'Deposit Waive/Discount')) AS deposit_waived,
+  (SELECT COALESCE(json_agg(c ORDER BY c.charge_date DESC), '[]'::json) FROM reservation_charges c WHERE c.booking_reference = b.booking_reference) AS charge_history,
+  (SELECT COALESCE(json_agg(card ORDER BY created_at DESC), '[]'::json) FROM booking_cards card WHERE card.booking_reference = b.booking_reference) AS card_history,
+  (SELECT COALESCE(json_agg(message ORDER BY created_at DESC), '[]'::json) FROM booking_messages message WHERE message.booking_reference = b.booking_reference) AS message_history
 `;
+
+const bookingDetailSelectSQL = sharedSelectSQL
+  .replace('b.distributed_paid_amount::numeric AS total_paid_amount,', `
+    (SELECT COALESCE(SUM(p.amount), 0) FROM payments p WHERE p.booking_reference = b.booking_reference)
+      + (SELECT COALESCE(SUM(rp.amount), 0) FROM reservation_payments rp WHERE rp.booking_reference = b.booking_reference AND rp.payment_method NOT IN ('Waive/Discount', 'Deposit Waive/Discount')) AS total_paid_amount,`)
+  .replace('ROUND((b.total_revenue::numeric - b.distributed_paid_amount)::numeric, 2) AS balance_due,', `
+    ROUND((b.total_revenue::numeric - (
+      (SELECT COALESCE(SUM(p.amount), 0) FROM payments p WHERE p.booking_reference = b.booking_reference)
+      + (SELECT COALESCE(SUM(rp.amount), 0) FROM reservation_payments rp WHERE rp.booking_reference = b.booking_reference AND rp.payment_method NOT IN ('Waive/Discount', 'Deposit Waive/Discount'))
+    ))::numeric, 2) AS balance_due,`);
+
+function bookingGroupKey(booking) {
+  return String(booking.raw_data?.Group ?? booking.raw_data?.group ?? '').trim()
+    || String(booking.order_reference || '').trim();
+}
+
+async function applyGroupPaymentWaterfall(bookings) {
+  const groupKeys = [...new Set(bookings.map(bookingGroupKey).filter(Boolean))];
+  if (!groupKeys.length) return { rows: bookings, groups: new Map() };
+
+  const groupResult = await pool.query(`
+    ${DISTRIBUTED_CTE}
+    SELECT b.booking_reference, b.order_reference, b.guest_first_name, b.guest_last_name,
+           CONCAT_WS(' ', b.guest_first_name, b.guest_last_name) AS guest_name,
+           b.adults, b.children, b.room_unit_name, b.property_name, b.raw_data,
+           b.total_revenue::numeric AS booked_amount,
+           (SELECT COALESCE(SUM(p.amount), 0) FROM payments p WHERE p.booking_reference = b.booking_reference)
+             + (SELECT COALESCE(SUM(rp.amount), 0) FROM reservation_payments rp WHERE rp.booking_reference = b.booking_reference AND rp.payment_method NOT IN ('Waive/Discount', 'Deposit Waive/Discount')) AS recorded_paid_amount
+    FROM distributed_bookings b
+    WHERE COALESCE(NULLIF(TRIM(b.raw_data->>'Group'), ''), NULLIF(TRIM(b.order_reference), '')) = ANY($1::text[])
+    ORDER BY COALESCE(NULLIF(TRIM(b.raw_data->>'Group'), ''), NULLIF(TRIM(b.order_reference), '')), b.booking_reference;
+  `, [groupKeys]);
+
+  const groups = new Map();
+  groupResult.rows.forEach(member => {
+    const key = bookingGroupKey(member);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(member);
+  });
+
+  const allocatedByReference = new Map();
+  groups.forEach(members => {
+    let remainingPaid = members.reduce((total, member) => total + Number(member.recorded_paid_amount || 0), 0);
+    members.forEach(member => {
+      const revenue = Math.max(0, Number(member.booked_amount || 0));
+      const allocatedPaid = Math.min(Math.max(0, remainingPaid), revenue);
+      allocatedByReference.set(member.booking_reference, allocatedPaid);
+      remainingPaid -= allocatedPaid;
+    });
+  });
+
+  const rows = bookings.map(booking => {
+    const allocatedPaid = allocatedByReference.get(booking.booking_reference);
+    if (allocatedPaid === undefined) return booking;
+    return {
+      ...booking,
+      total_paid_amount: allocatedPaid,
+      balance_due: Number(booking.booked_amount || booking.total_revenue || 0) - allocatedPaid
+    };
+  });
+  return { rows, groups, allocatedByReference };
+}
+
+function groupMembersWithAllocation(members, allocatedByReference) {
+  return members.map(member => {
+    const allocatedPaid = allocatedByReference.get(member.booking_reference) || 0;
+    return {
+      ...member,
+      total_paid_amount: allocatedPaid,
+      balance_due: Number(member.booked_amount || 0) - allocatedPaid
+    };
+  });
+}
+
+async function recalculateBookingPaidAmount(client, bookingReference) {
+  await client.query(`
+    UPDATE bookings b
+    SET paid_amount = COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.booking_reference = b.booking_reference), 0)
+      + COALESCE((SELECT SUM(rp.amount) FROM reservation_payments rp WHERE rp.booking_reference = b.booking_reference), 0)
+    WHERE b.booking_reference = $1;
+  `, [bookingReference]);
+}
 
 // ============================================================================
 // [SECTION-02]: HEALTH, PROPERTIES & DATE
@@ -155,55 +363,43 @@ app.get('/api/operations/latest-date', async (req, res) => {
 // ============================================================================
 app.get('/api/kpis', async (req, res) => {
   try {
-    const { property, from_date, to_date } = req.query;
-    let whereClauses = []; const params = [];
-    if (property && property !== 'ALL') { params.push(property.trim()); whereClauses.push(`TRIM(b.property_name) ILIKE $${params.length}`); }
-    if (from_date && to_date) { params.push(from_date, to_date); whereClauses.push(`b.check_in::DATE >= $${params.length - 1}::DATE AND b.check_in::DATE <= $${params.length}::DATE`); }
-    const filterCondition = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
-
-    const kpiQuery = `${DISTRIBUTED_CTE} SELECT COUNT(DISTINCT b.booking_reference) AS total_bookings, COALESCE(SUM(b.total_revenue::numeric), 0)::numeric AS total_booked_revenue, COALESCE(SUM(b.distributed_paid_amount), 0)::numeric AS total_collected_revenue, COALESCE(SUM(CASE WHEN (b.total_revenue::numeric - b.distributed_paid_amount) > 0 THEN (b.total_revenue::numeric - b.distributed_paid_amount) ELSE 0 END), 0)::numeric AS total_outstanding_balance, COALESCE(SUM(CASE WHEN b.distributed_paid_amount <= 0 THEN 1 ELSE 0 END), 0) AS unpaid_count, COALESCE(SUM(CASE WHEN b.distributed_paid_amount >= b.total_revenue::numeric THEN 1 ELSE 0 END), 0) AS fully_paid_count FROM distributed_bookings b ${filterCondition};`;
-    const result = await pool.query(kpiQuery, params); 
-    res.json(result.rows[0] || {});
+    const property = String(req.query.property || '').trim();
+    const bookingProperty = property && property !== 'ALL' ? 'AND TRIM(b.property_name) ILIKE $1' : '';
+    const paymentProperty = property && property !== 'ALL' ? 'AND TRIM(property_name) ILIKE $1' : '';
+    const params = property && property !== 'ALL' ? [property] : [];
+    const [arrivals, departures, cash] = await Promise.all([
+      pool.query(`${DISTRIBUTED_CTE} SELECT COUNT(*)::int AS count, COALESCE(SUM(b.total_revenue::numeric - b.distributed_paid_amount), 0)::numeric AS value FROM distributed_bookings b WHERE b.check_in >= CURRENT_DATE AND b.check_in < NOW() + INTERVAL '2 days' AND (b.total_revenue::numeric - b.distributed_paid_amount) > 0 AND LOWER(TRIM(COALESCE(b.booking_status, ''))) NOT IN ('canceled', 'cancelled') ${bookingProperty};`, params),
+      pool.query(`${DISTRIBUTED_CTE} SELECT COUNT(*)::int AS count, COALESCE(SUM(b.total_revenue::numeric - b.distributed_paid_amount), 0)::numeric AS value FROM distributed_bookings b WHERE b.check_out < CURRENT_DATE AND (b.total_revenue::numeric - b.distributed_paid_amount) > 0 AND LOWER(TRIM(COALESCE(b.booking_status, ''))) NOT IN ('canceled', 'cancelled') ${bookingProperty};`, params),
+      pool.query(`SELECT COALESCE(SUM(amount), 0)::numeric AS value FROM (SELECT amount FROM payments WHERE amount > 0 AND COALESCE(payment_date, received_date_time)::DATE = CURRENT_DATE AND LOWER(TRIM(COALESCE(payment_status, ''))) NOT IN ('failed', 'declined', 'cancelled', 'canceled') ${paymentProperty} UNION ALL SELECT rp.amount FROM reservation_payments rp JOIN bookings b ON b.booking_reference = rp.booking_reference WHERE rp.amount > 0 AND rp.payment_date::DATE = CURRENT_DATE ${bookingProperty}) today_cash;`, params)
+    ]);
+    res.json({ at_risk_arrivals: arrivals.rows[0], post_departure_debt: departures.rows[0], settled_cash: cash.rows[0] });
   } catch(e) { res.status(500).json({error: e.message}); }
 });
 
 app.get('/api/reports/charts', async (req, res) => {
   try {
-    const { property, from_date, to_date } = req.query;
-    let whereClauses = []; const params = [];
-    if (property && property !== 'ALL') { params.push(property.trim()); whereClauses.push(`TRIM(b.property_name) ILIKE $${params.length}`); }
-    if (from_date && to_date) { params.push(from_date, to_date); whereClauses.push(`b.check_in::DATE >= $${params.length - 1}::DATE AND b.check_in::DATE <= $${params.length}::DATE`); }
-    const whereSqlWithCheckin = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')} AND b.check_in IS NOT NULL` : 'WHERE b.check_in IS NOT NULL';
-    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
-
-    const monthlyQuery = `${DISTRIBUTED_CTE} SELECT TO_CHAR(b.check_in, 'YYYY-MM') AS check_in_month, COALESCE(SUM(b.total_revenue::numeric), 0)::numeric AS revenue, COALESCE(SUM(b.distributed_paid_amount), 0)::numeric AS collected, COALESCE(SUM(CASE WHEN (b.total_revenue::numeric - b.distributed_paid_amount) > 0 THEN (b.total_revenue::numeric - b.distributed_paid_amount) ELSE 0 END), 0)::numeric AS unpaid FROM distributed_bookings b ${whereSqlWithCheckin} GROUP BY TO_CHAR(b.check_in, 'YYYY-MM') ORDER BY check_in_month ASC;`;
-    const channelQuery = `${DISTRIBUTED_CTE} SELECT COALESCE(b.channel, 'Direct') AS channel, COALESCE(SUM(b.total_revenue::numeric), 0)::numeric AS revenue FROM distributed_bookings b ${whereSql} GROUP BY COALESCE(b.channel, 'Direct') ORDER BY revenue DESC;`;
-
-    const [monthlyRes, channelRes] = await Promise.all([pool.query(monthlyQuery, params), pool.query(channelQuery, params)]);
-    res.json({ monthly: monthlyRes.rows, channels: channelRes.rows });
+    const property = String(req.query.property || '').trim();
+    const propertyClause = property && property !== 'ALL' ? 'AND TRIM(b.property_name) ILIKE $1' : '';
+    const params = property && property !== 'ALL' ? [property] : [];
+    const paceQuery = `${DISTRIBUTED_CTE} SELECT DATE_TRUNC('week', b.check_in)::DATE AS period_start, COALESCE(SUM(b.total_revenue::numeric), 0)::numeric AS revenue FROM distributed_bookings b WHERE b.check_in >= CURRENT_DATE AND b.check_in < CURRENT_DATE + INTERVAL '90 days' AND LOWER(TRIM(COALESCE(b.booking_status, ''))) NOT IN ('canceled', 'cancelled') ${propertyClause} GROUP BY 1 ORDER BY 1;`;
+    const channelQuery = `${DISTRIBUTED_CTE} SELECT CASE WHEN LOWER(COALESCE(b.channel, 'direct')) ~ '(booking|expedia|agoda|airbnb|hotelbeds|vrbo|travel)' THEN 'OTA' ELSE 'Direct' END AS channel_group, COUNT(*)::int AS bookings, COALESCE(SUM(b.total_revenue::numeric), 0)::numeric AS revenue FROM distributed_bookings b WHERE b.check_in >= CURRENT_DATE AND b.check_in < CURRENT_DATE + INTERVAL '90 days' AND LOWER(TRIM(COALESCE(b.booking_status, ''))) NOT IN ('canceled', 'cancelled') ${propertyClause} GROUP BY 1 ORDER BY revenue DESC;`;
+    const [paceRes, channelRes] = await Promise.all([pool.query(paceQuery, params), pool.query(channelQuery, params)]);
+    res.json({ pace: paceRes.rows, channels: channelRes.rows });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/reports/reconciliation', async (req, res) => {
   try {
-    const { property, status, search, from_date, to_date, limit = 25, offset = 0, name_sort = 'name_asc', hide_zero_paid = 'false', hide_blank_notes = 'false' } = req.query;
-    let whereClauses = []; const params = [];
-    if (property && property !== 'ALL') { params.push(property.trim()); whereClauses.push(`TRIM(b.property_name) ILIKE $${params.length}`); }
-    if (from_date && to_date) { params.push(from_date, to_date); whereClauses.push(`b.check_in::DATE >= $${params.length - 1}::DATE AND b.check_in::DATE <= $${params.length}::DATE`); }
-    if (status && status !== 'ALL') {
-      if (status === 'Fully Paid') whereClauses.push(`b.distributed_paid_amount >= b.total_revenue::numeric`);
-      else if (status === 'Partially Paid') whereClauses.push(`b.distributed_paid_amount > 0 AND b.distributed_paid_amount < b.total_revenue::numeric`);
-      else if (status === 'Unpaid') whereClauses.push(`b.distributed_paid_amount <= 0`);
-    }
-    if (hide_zero_paid === 'true') whereClauses.push('b.distributed_paid_amount <> 0');
-    if (hide_blank_notes === 'true') whereClauses.push("COALESCE(NULLIF(TRIM(b.notes), ''), NULLIF(TRIM(b.booking_notes), '')) IS NOT NULL");
-    if (search && search.trim()) { params.push(`%${search.trim()}%`); whereClauses.push(`(b.booking_reference ILIKE $${params.length} OR CONCAT_WS(' ', b.guest_first_name, b.guest_last_name) ILIKE $${params.length})`); }
-
-    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+    const property = String(req.query.property || '').trim();
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 100);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+    const params = property && property !== 'ALL' ? [property] : [];
+    const propertyClause = property && property !== 'ALL' ? 'AND TRIM(b.property_name) ILIKE $1' : '';
+    const exceptionClause = `(b.check_out < CURRENT_DATE AND (b.total_revenue::numeric - b.distributed_paid_amount) > 0) OR (b.total_revenue::numeric - b.distributed_paid_amount) < 0 OR (LOWER(TRIM(COALESCE(b.booking_status, ''))) IN ('canceled', 'cancelled') AND b.total_revenue::numeric > 0 AND b.distributed_paid_amount = 0)`;
+    const whereSql = `WHERE (${exceptionClause}) ${propertyClause}`;
     const countResult = await pool.query(`${DISTRIBUTED_CTE} SELECT COUNT(*) FROM distributed_bookings b ${whereSql}`, params);
-    const dataParams = [...params, parseInt(limit, 10), parseInt(offset, 10)];
-    const nameOrder = name_sort === 'name_desc' ? 'DESC' : 'ASC';
-    const dataQuery = `${DISTRIBUTED_CTE} SELECT ${sharedSelectSQL}, CASE WHEN b.distributed_paid_amount <= 0 THEN 'Unpaid' WHEN b.distributed_paid_amount >= b.total_revenue::numeric THEN 'Fully Paid' ELSE 'Partially Paid' END AS payment_status FROM distributed_bookings b ${whereSql} ORDER BY CONCAT_WS(' ', b.guest_first_name, b.guest_last_name) ${nameOrder} NULLS LAST, b.check_in DESC NULLS LAST LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length};`;
+    const dataParams = [...params, limit, offset];
+    const dataQuery = `${DISTRIBUTED_CTE} SELECT ${sharedSelectSQL}, CASE WHEN b.check_out < CURRENT_DATE AND (b.total_revenue::numeric - b.distributed_paid_amount) > 0 THEN 'Post-departure debt' WHEN (b.total_revenue::numeric - b.distributed_paid_amount) < 0 THEN 'Refund due' ELSE 'Cancellation penalty missed' END AS exception_type, ROUND((b.total_revenue::numeric - b.distributed_paid_amount)::numeric, 2) AS exposure FROM distributed_bookings b ${whereSql} ORDER BY CASE WHEN b.check_out < CURRENT_DATE AND (b.total_revenue::numeric - b.distributed_paid_amount) > 0 THEN 1 WHEN (b.total_revenue::numeric - b.distributed_paid_amount) < 0 THEN 2 ELSE 3 END, ABS(b.total_revenue::numeric - b.distributed_paid_amount) DESC LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length};`;
     const result = await pool.query(dataQuery, dataParams);
     res.json({ total: parseInt(countResult.rows[0].count, 10), data: result.rows });
   } catch(e) { res.status(500).json({error: e.message}); }
@@ -371,11 +567,10 @@ app.post('/api/daily-tasks/preview', async (req, res) => { try { const task = ta
 
 app.post('/api/daily-tasks/sync', async (req, res) => {
   try {
-    if (!google || !process.env.GOOGLE_APPLICATION_CREDENTIALS) throw new Error('Google Sheets credentials are not configured.');
     const task = taskDefinition(req.body.task); let mapping = req.body.mapping;
     if (req.body.preset_id) { const preset = await pool.query('SELECT mapping FROM task_mapping_presets WHERE preset_id = $1 AND task_type = $2', [req.body.preset_id, req.body.task]); if (!preset.rowCount) throw new Error('Selected preset was not found.'); mapping = preset.rows[0].mapping; }
     const data = await getTaskRows(req.body.task, req.body); mapping = validateMapping(mapping, data.columns); const keyItem = mapping.find(item => item.isKey); const keyIndex = mapping.indexOf(keyItem);
-    const auth = new google.auth.GoogleAuth({ keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS, scopes: ['https://www.googleapis.com/auth/spreadsheets'] }); const sheets = google.sheets({ version: 'v4', auth }); const spreadsheetId = process.env[task.idEnv]; if (!spreadsheetId) throw new Error(`${task.idEnv} is not configured.`);
+    const sheets = await getGoogleSheetsClient(); const spreadsheetId = process.env[task.idEnv]; if (!spreadsheetId) throw new Error(`${task.idEnv} is not configured.`);
     const existing = await sheets.spreadsheets.values.get({ spreadsheetId, range: `'${task.sheet}'!A:ZZ` }); const values = existing.data.values || []; const headers = mapping.map(item => item.header); const existingHeaders = values[0] || headers; const keyHeader = keyItem.header; const existingKeyIndex = Math.max(0, existingHeaders.indexOf(keyHeader)); const rowByKey = new Map(values.slice(1).map((row, index) => [String(row[existingKeyIndex] || ''), index + 2]));
     const updates = []; const appends = []; data.rows.forEach(row => { const mapped = mapping.map(item => String(evaluateMapping(item, row))); const key = mapped[keyIndex]; const sheetRow = existingHeaders.map(header => { const index = headers.indexOf(header); return index >= 0 ? mapped[index] : ''; }); if (key && rowByKey.has(key)) updates.push({ range: `'${task.sheet}'!A${rowByKey.get(key)}`, values: [sheetRow] }); else if (key) appends.push(sheetRow); });
     if (!values.length) await sheets.spreadsheets.values.update({ spreadsheetId, range: `'${task.sheet}'!A1`, valueInputOption: 'USER_ENTERED', requestBody: { values: [headers] } });
@@ -384,22 +579,239 @@ app.post('/api/daily-tasks/sync', async (req, res) => {
     res.json({ success: true, task: task.title, updated: updates.length, inserted: appends.length, skipped: data.rows.length - updates.length - appends.length, key: keyItem.header });
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
+
+// ============================================================================
+// [SECTION-03C]: GOOGLE SHEETS / POSTGRESQL BOOKING RECONCILIATION
+// ============================================================================
+const DEFAULT_RECONCILIATION_SHEET_ID = '1PY3DTpnFNTRsb-bbFiU8u7acXk7hlf9sqij6DGGAmAE';
+const DEFAULT_RECONCILIATION_TAB = 'In&Out 2026';
+
+function parseSheetCheckIn(value) {
+  const rawSheetDate = String(value || '').trim();
+  let normalizedSheetDate = '';
+  if (rawSheetDate.includes('/')) {
+    const parts = rawSheetDate.split('/');
+    if (parts.length === 3) {
+      const day = parts[0].padStart(2, '0');
+      const month = parts[1].padStart(2, '0');
+      const year = parts[2];
+      const candidate = `${year}-${month}-${day}`;
+      const parsed = new Date(`${candidate}T00:00:00Z`);
+      if (!Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === candidate) normalizedSheetDate = candidate;
+    }
+  }
+  return normalizedSheetDate;
+}
+
+function normalizeBookingReference(reference) {
+  return String(reference || '').trim().toUpperCase();
+}
+
+function normalizePropertyName(property) {
+  return String(property || '').replace(/\s+/g, '').toLowerCase();
+}
+
+function normalizeDateOnly(value) {
+  return new Date(value).toISOString().split('T')[0];
+}
+
+function reconciliationKey(reference, checkIn) {
+  return `${normalizeBookingReference(reference)}_${normalizeDateOnly(checkIn)}`;
+}
+
+function parseReconciliationDate(value, fieldName) {
+  const date = String(value || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`${fieldName} must use YYYY-MM-DD format.`);
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) throw new Error(`${fieldName} is not a valid calendar date.`);
+  return date;
+}
+
+function buildReconciliationInsights(missingInSystem, missingInSheet) {
+  const discrepancies = [...missingInSystem, ...missingInSheet];
+  const propertyCounts = new Map();
+  const dateCounts = new Map();
+  discrepancies.forEach(row => {
+    const property = String(row.property_name || 'Unknown property').trim() || 'Unknown property';
+    propertyCounts.set(property, (propertyCounts.get(property) || 0) + 1);
+    dateCounts.set(row.check_in, (dateCounts.get(row.check_in) || 0) + 1);
+  });
+  const mostErrors = [...propertyCounts.entries()].sort((left, right) => right[1] - left[1])[0];
+  const highestFailureDate = [...dateCounts.entries()]
+    .map(([date, count]) => ({ date, count, rate: 1 }))
+    .sort((left, right) => right.rate - left.rate || right.count - left.count)[0];
+  return {
+    total_count: discrepancies.length,
+    property_with_most_errors: mostErrors ? { property: mostErrors[0], count: mostErrors[1] } : null,
+    date_with_highest_failure_rate: highestFailureDate || null
+  };
+}
+
+app.post('/api/reconciliation', async (req, res) => {
+  try {
+    const spreadsheetId = String(req.body.sheetId || DEFAULT_RECONCILIATION_SHEET_ID).trim();
+    const tabName = String(req.body.tabName || DEFAULT_RECONCILIATION_TAB).trim();
+    if (!spreadsheetId || !tabName) throw new Error('Google Sheet ID and tab name are required.');
+    const startDate = parseReconciliationDate(req.body.startDate, 'Start date');
+    const endDate = parseReconciliationDate(req.body.endDate, 'End date');
+    if (endDate < startDate) throw new Error('End date must be on or after start date.');
+    const propertyName = String(req.body.propertyName || 'ALL').trim();
+    const hasPropertyFilter = propertyName && propertyName.toUpperCase() !== 'ALL';
+    const normalizedPropertyFilter = normalizePropertyName(propertyName);
+
+    const sheets = await getGoogleSheetsClient(GOOGLE_SHEETS_READONLY_SCOPES);
+    const escapedTabName = tabName.replace(/'/g, "''");
+    const sheetResult = await sheets.spreadsheets.values.get({ spreadsheetId, range: `'${escapedTabName}'!A:AB`, majorDimension: 'ROWS' });
+    const values = sheetResult.data.values || [];
+    const sheetReferencesSet = new Set();
+    const targetSheetRows = [];
+    let skippedSheetRows = 0;
+
+    values.slice(1).forEach(row => {
+      const sheetReference = String(row[17] || '').trim().toUpperCase();
+      if (!sheetReference) { skippedSheetRows += 1; return; }
+      sheetReferencesSet.add(sheetReference);
+      const checkIn = parseSheetCheckIn(row[0]);
+      const property = String(row[27] || '').trim();
+      if (checkIn && checkIn >= startDate && checkIn <= endDate && (!hasPropertyFilter || normalizePropertyName(property) === normalizedPropertyFilter)) {
+        targetSheetRows.push({
+          booking_reference: sheetReference,
+          check_in: checkIn,
+          guest_name: String(row[8] || '').trim(),
+          property_name: property,
+          raw_sheet_row: row
+        });
+      }
+    });
+
+    const dbResult = await pool.query(`
+            SELECT b.*,
+              check_in::DATE AS check_in,
+              check_out::DATE AS check_out,
+              CONCAT_WS(' ', guest_first_name, guest_last_name) AS guest_name,
+              telephone AS guest_phone,
+              email AS guest_email,
+              COALESCE(adults, 0) + COALESCE(children, 0) AS number_of_guests,
+              nights,
+              channel AS booking_source,
+              booking_status AS status,
+              NULL::TEXT AS payment_status,
+              COALESCE(
+                CASE WHEN raw_data->>'room_rate' ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN (raw_data->>'room_rate')::NUMERIC END,
+                CASE WHEN raw_data->>'price_per_night' ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN (raw_data->>'price_per_night')::NUMERIC END
+              ) AS room_rate,
+              COALESCE(other_revenue, 0) AS other_revenue,
+              COALESCE(NULLIF(TRIM(booking_notes), ''), NULLIF(TRIM(notes), '')) AS booking_notes,
+              total_revenue AS total_price,
+              total_revenue AS booked_amount,
+              COALESCE(
+                (SELECT STRING_AGG(method, ', ' ORDER BY method)
+                 FROM (
+                   SELECT DISTINCT NULLIF(TRIM(p.payment_method), '') AS method
+                   FROM payments p
+                   WHERE REGEXP_REPLACE(UPPER(TRIM(p.booking_reference)), '\\s+', '', 'g') = REGEXP_REPLACE(UPPER(TRIM(b.booking_reference)), '\\s+', '', 'g')
+                     AND COALESCE(p.amount, 0) > 0
+                     AND NULLIF(TRIM(p.payment_method), '') IS NOT NULL
+                 ) positive_payment_methods),
+                (SELECT NULLIF(TRIM(rp.payment_method), '')
+                 FROM reservation_payments rp
+                 WHERE REGEXP_REPLACE(UPPER(TRIM(rp.booking_reference)), '\\s+', '', 'g') = REGEXP_REPLACE(UPPER(TRIM(b.booking_reference)), '\\s+', '', 'g')
+                 ORDER BY payment_date DESC NULLS LAST, payment_id DESC LIMIT 1),
+                ''
+              ) AS payment_methods,
+              property_name,
+              room_unit_name
+      FROM bookings AS b
+      WHERE check_in::DATE >= $1::DATE AND check_in::DATE <= $2::DATE
+        ${hasPropertyFilter ? 'AND REGEXP_REPLACE(LOWER(COALESCE(property_name, \'\')), \'\\s+\', \'\', \'g\') = $3' : ''}
+      ORDER BY check_in, booking_reference;
+    `, hasPropertyFilter ? [startDate, endDate, normalizedPropertyFilter] : [startDate, endDate]);
+
+    const dbRows = dbResult.rows.map(dbRecord => {
+      const roomRate = parseFloat(dbRecord.room_unit_revenue || dbRecord.room_rate || dbRecord.raw_data?.room_unit_revenue || dbRecord.raw_data?.room_rate || dbRecord.raw_data?.price_per_night || 0) || 0;
+      const otherRev = parseFloat(dbRecord.other_revenue || 0) || 0;
+      const total = parseFloat(dbRecord.total_revenue || 0) || 0;
+      const paid = parseFloat(dbRecord.paid_amount || 0) || 0;
+      const source = String(dbRecord.booking_source || '').toLowerCase().trim();
+      let paymentStatus = '';
+      let appendedNote = '';
+
+      if (paid === 0 || total === 0 || source === 'direct') {
+        paymentStatus = 'Payment on arrival';
+      } else if (paid >= roomRate) {
+        paymentStatus = 'Pre-paid';
+        if (otherRev > 0) appendedNote = paid >= total ? ' | ✅ Other revenue paid' : ' | 🔴 Other revenue not paid';
+      } else if (paid > 0 && paid < roomRate) {
+        paymentStatus = 'Payment on arrival';
+        appendedNote = ' | ⚠️ Room rate partially paid';
+      }
+
+      const originalNote = String(dbRecord.notes || dbRecord.booking_notes || '').trim();
+      const cleanAppendedNote = appendedNote.replace(/^\s*\|\s*/, '').trim();
+      const finalNote = cleanAppendedNote
+        ? (originalNote ? `${cleanAppendedNote} | ${originalNote}` : cleanAppendedNote)
+        : originalNote;
+      const prepaidOta = /(expedia\s*collect|booking\.com\s*vcc|booking\s*vcc|virtual\s*card|prepaid)/i.test(source);
+      const paymentMethod = paid >= roomRate
+        ? String(dbRecord.payment_methods || (prepaidOta && paymentStatus === 'Pre-paid' ? 'Pre-paid' : '')).trim()
+        : '';
+      return {
+        ...dbRecord,
+        check_in: normalizeDateOnly(dbRecord.check_in),
+        room_unit_revenue: roomRate,
+        room_rate: roomRate,
+        other_revenue: otherRev,
+        payment_status: paymentStatus,
+        payment_method: paymentMethod,
+        booking_notes: finalNote
+      };
+    });
+    const missingInSheet = dbRows.filter(dbRecord => {
+      const dbReference = String(dbRecord.booking_reference || '').trim().toUpperCase();
+      return dbReference && !sheetReferencesSet.has(dbReference);
+    });
+    const targetReferences = [...new Set(targetSheetRows.map(row => row.booking_reference))];
+    let existingTargetReferences = new Set();
+    if (targetReferences.length) {
+      const targetDbResult = await pool.query(`
+        SELECT DISTINCT REGEXP_REPLACE(UPPER(TRIM(booking_reference)), '\\s+', '', 'g') AS normalized_reference
+        FROM bookings
+        WHERE REGEXP_REPLACE(UPPER(TRIM(booking_reference)), '\\s+', '', 'g') = ANY($1::TEXT[]);
+      `, [targetReferences.map(reference => normalizeBookingReference(reference))]);
+      existingTargetReferences = new Set(targetDbResult.rows.map(row => row.normalized_reference));
+    }
+    const missingInSystem = targetSheetRows.filter(row => !existingTargetReferences.has(normalizeBookingReference(row.booking_reference)));
+    console.log('[Reconciliation] DB references sample:', dbRows.slice(0, 3).map(dbRecord => String(dbRecord.booking_reference || '').trim().toUpperCase()));
+    console.log('[Reconciliation] Sheet references sample:', [...sheetReferencesSet].slice(0, 3));
+    const insights = buildReconciliationInsights(missingInSystem, missingInSheet);
+    res.json({
+      date_range: { from: startDate, to: endDate },
+      property_name: hasPropertyFilter ? propertyName : 'ALL',
+      skipped_sheet_rows: skippedSheetRows,
+      summary: { total_discrepancies: missingInSystem.length + missingInSheet.length, missing_in_system: missingInSystem.length, missing_in_sheet: missingInSheet.length },
+      insights,
+      missing_in_system: missingInSystem,
+      missing_in_sheet: missingInSheet,
+      missingInSystem,
+      missingInSheet
+    });
+  } catch (err) {
+    console.error('Booking reconciliation error:', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
 // ============================================================================
 // [SECTION-04]: SMART GLOBAL SEARCH (HANDLES REVERSED NAMES)
 // ============================================================================
 app.get('/api/bookings/search', async (req, res) => {
   try {
-    const { q } = req.query;
-    if (!q || !q.trim()) return res.json([]);
-    
-    // Split search query by space to handle reversed names (e.g. "John Smith" vs "Smith John")
-    const searchString = q.trim();
-    const parts = searchString.split(/\s+/);
-    
-    let nameCondition = `CONCAT_WS(' ', b.guest_first_name, b.guest_last_name) ILIKE $1`;
-    let queryParams = [`%${searchString}%`];
+    const searchString = String(req.query.q || '').trim();
+    if (!searchString) return res.json([]);
 
-    // If two words are entered, check both normal and reversed order
+    const parts = searchString.split(/\s+/);
+    const queryParams = [`%${searchString}%`];
+    let nameCondition = `CONCAT_WS(' ', b.guest_first_name, b.guest_last_name) ILIKE $1`;
+
     if (parts.length === 2) {
       const reversedString = `${parts[1]} ${parts[0]}`;
       nameCondition = `(CONCAT_WS(' ', b.guest_first_name, b.guest_last_name) ILIKE $1 OR CONCAT_WS(' ', b.guest_first_name, b.guest_last_name) ILIKE $2)`;
@@ -408,17 +820,61 @@ app.get('/api/bookings/search', async (req, res) => {
 
     const result = await pool.query(`
       ${DISTRIBUTED_CTE}
-      SELECT ${sharedSelectSQL} FROM distributed_bookings b
+      SELECT ${sharedSelectSQL}
+      FROM distributed_bookings AS b
       WHERE ${nameCondition}
-         OR b.booking_reference ILIKE $1 
-         OR b.order_reference ILIKE $1 
-         OR b.telephone ILIKE $1 
+         OR b.booking_reference ILIKE $1
+         OR b.order_reference ILIKE $1
+         OR b.telephone ILIKE $1
          OR b.email ILIKE $1
-      ORDER BY b.check_in DESC LIMIT 15;
+      ORDER BY b.check_in DESC
+      LIMIT 15;
     `, queryParams);
-    
+
     res.json(result.rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    console.error('Global booking search error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/bookings/:ref', async (req, res) => {
+  try {
+    const bookingReference = String(req.params.ref || '').trim();
+    if (!bookingReference) return res.status(400).json({ error: 'Booking reference is required.' });
+
+    const result = await pool.query(`
+      ${DISTRIBUTED_CTE}
+      SELECT ${bookingDetailSelectSQL}
+      FROM distributed_bookings b
+      WHERE b.booking_reference = $1
+      LIMIT 1;
+    `, [bookingReference]);
+
+    if (!result.rows.length) return res.status(404).json({ error: 'Booking not found.' });
+
+    const booking = result.rows[0];
+    const allocation = await applyGroupPaymentWaterfall([booking]);
+    const groupKey = bookingGroupKey(booking);
+    const groupMembers = allocation.groups.get(groupKey);
+    if (groupMembers && groupMembers.length > 1) {
+      const totalGroupGuests = groupMembers.reduce(
+        (total, member) => total + Number(member.adults || 0) + Number(member.children || 0),
+        0
+      );
+      return res.json({
+        ...allocation.rows[0],
+        group_members: groupMembersWithAllocation(groupMembers, allocation.allocatedByReference),
+        total_group_paid: groupMembers.reduce((total, member) => total + Number(member.recorded_paid_amount || 0), 0),
+        total_group_guests: totalGroupGuests
+      });
+    }
+
+    res.json(allocation.rows[0]);
+  } catch (err) {
+    console.error('Booking detail error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ============================================================================
@@ -456,11 +912,17 @@ app.get('/api/operations/daily', async (req, res) => {
     const { property, date } = req.query;
     if (!date) return res.status(400).json({ error: 'Date is required.' });
     let propertyCondition = ''; const queryParams = [date];
-    if (property && property !== 'ALL') { queryParams.push(property.trim()); propertyCondition = `AND TRIM(b.property_name) ILIKE TRIM($2)`; }
+    const properties = String(property || '').split(',').map(value => value.trim()).filter(value => value && value !== 'ALL');
+    if (properties.length) { queryParams.push(properties); propertyCondition = `AND TRIM(b.property_name) ILIKE ANY($2::TEXT[])`; }
 
     const baseQuery = (dateCol) => `${DISTRIBUTED_CTE} SELECT ${sharedSelectSQL}, CASE WHEN b.distributed_paid_amount <= 0 THEN 'Payment on Arrival / Unpaid' WHEN b.distributed_paid_amount < b.total_revenue::numeric THEN 'Partially Paid' ELSE 'Fully Prepaid' END AS payment_status FROM distributed_bookings b WHERE b.${dateCol}::DATE = $1::DATE ${propertyCondition} AND LOWER(TRIM(COALESCE(b.booking_status, ''))) NOT IN ('canceled', 'cancelled') ORDER BY b.room_unit_name ASC, b.check_in ASC;`;
     const [arrRes, depRes] = await Promise.all([pool.query(baseQuery('check_in'), queryParams), pool.query(baseQuery('check_out'), queryParams)]);
-    res.json({ arrivals: arrRes.rows, departures: depRes.rows });
+    const allocation = await applyGroupPaymentWaterfall([...arrRes.rows, ...depRes.rows]);
+    const allocatedRows = new Map(allocation.rows.map(row => [row.booking_reference, row]));
+    res.json({
+      arrivals: arrRes.rows.map(row => allocatedRows.get(row.booking_reference) || row),
+      departures: depRes.rows.map(row => allocatedRows.get(row.booking_reference) || row)
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -504,9 +966,10 @@ app.get('/api/operations/duplicate-guests', async (req, res) => {
 // [SECTION-07]: UPDATE BOOKING, ADD PAYMENTS & DELETE
 // ============================================================================
 app.post('/api/reservations/:ref/update', async (req, res) => {
+  const client = await pool.connect();
   try {
     const { ref } = req.params;
-    const { guest_name, telephone, email, company_name, company_vat, channel, booking_status, room_unit_name, property_name, notes } = req.body;
+    const { guest_name, telephone, email, company_name, company_vat, channel, booking_status, room_unit_name, room_unit_type, property_name, notes, check_in, check_out, address_line, city, postcode } = req.body;
     
     const nameParts = (guest_name || '').trim().split(' ');
     const firstName = nameParts[0] || '';
@@ -515,12 +978,23 @@ app.post('/api/reservations/:ref/update', async (req, res) => {
     const query = `
       UPDATE bookings SET 
         guest_first_name = $1, guest_last_name = $2, telephone = $3, email = $4,
-        company_name = $5, company_vat = $6, channel = $7, booking_status = COALESCE(NULLIF($8, ''), booking_status), room_unit_name = $9, property_name = $10, notes = $11
-      WHERE booking_reference = $12 RETURNING *;
+        company_name = $5, company_vat = $6, channel = $7, booking_status = COALESCE(NULLIF($8, ''), booking_status), room_unit_name = $9, property_name = $10, notes = $11,
+        room_unit_type = COALESCE(NULLIF($12, ''), room_unit_type), check_in = COALESCE(NULLIF($13, '')::DATE, check_in), check_out = COALESCE(NULLIF($14, '')::DATE, check_out),
+        address_line = $15, city = $16, postcode = $17
+      WHERE booking_reference = $18 RETURNING *;
     `;
-    const updated = await pool.query(query, [firstName, lastName, telephone, email, company_name, company_vat, channel, booking_status, room_unit_name, property_name, notes, ref]);
+    await client.query('BEGIN');
+    const updated = await client.query(query, [firstName, lastName, telephone, email, company_name, company_vat, channel, booking_status, room_unit_name, property_name, notes, room_unit_type, check_in || '', check_out || '', address_line || '', city || '', postcode || '', ref]);
+    if (!updated.rowCount) throw new Error('Reservation not found.');
+    if (['canceled', 'cancelled'].includes(String(booking_status || '').trim().toLowerCase())) {
+      const ghost = await client.query(`SELECT total_revenue, paid_amount FROM bookings WHERE booking_reference = $1`, [ref]);
+      if (Number(ghost.rows[0].total_revenue || 0) === 0 && Number(ghost.rows[0].paid_amount || 0) === 0) {
+        await client.query('DELETE FROM bookings WHERE booking_reference = $1', [ref]);
+      }
+    }
+    await client.query('COMMIT');
     res.json({ success: true, booking: updated.rows[0] });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: err.message }); } finally { client.release(); }
 });
 
 app.post('/api/reservations', async (req, res) => {
@@ -595,16 +1069,22 @@ app.post('/api/reservations', async (req, res) => {
 });
 
 app.post('/api/reservations/:ref/status', async (req, res) => {
+  const client = await pool.connect();
   try {
     const { ref } = req.params;
     const requestedStatus = String(req.body.booking_status || '').trim().toLowerCase();
     const bookingStatus = requestedStatus === 'canceled' || requestedStatus === 'cancelled' ? 'Canceled' : requestedStatus === 'confirmed' ? 'Confirmed' : null;
     if (!bookingStatus) return res.status(400).json({ error: 'Booking status must be Confirmed or Canceled.' });
 
-    const result = await pool.query('UPDATE bookings SET booking_status = $1 WHERE booking_reference = $2 RETURNING booking_reference, booking_status;', [bookingStatus, ref]);
-    if (result.rowCount === 0) return res.status(404).json({ error: 'Reservation not found.' });
+    await client.query('BEGIN');
+    const result = await client.query('UPDATE bookings SET booking_status = $1 WHERE booking_reference = $2 RETURNING booking_reference, booking_status, total_revenue, paid_amount;', [bookingStatus, ref]);
+    if (result.rowCount === 0) throw new Error('Reservation not found.');
+    if (bookingStatus === 'Canceled' && Number(result.rows[0].total_revenue || 0) === 0 && Number(result.rows[0].paid_amount || 0) === 0) {
+      await client.query('DELETE FROM bookings WHERE booking_reference = $1', [ref]);
+    }
+    await client.query('COMMIT');
     res.json({ success: true, booking: result.rows[0] });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { await client.query('ROLLBACK'); res.status(err.message === 'Reservation not found.' ? 404 : 500).json({ error: err.message }); } finally { client.release(); }
 });
 
 app.post('/api/reservations/:ref/payments', async (req, res) => {
@@ -625,7 +1105,7 @@ app.post('/api/reservations/:ref/payments', async (req, res) => {
       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING *;
     `, [ref, bookingRes.rows[0].order_reference || ref, parsedAmount, payment_method, card_brand || null, card_last_four || null, description]);
 
-    await client.query(`UPDATE bookings b SET paid_amount = (SELECT COALESCE(SUM(amount), 0) FROM reservation_payments WHERE booking_reference = b.booking_reference) WHERE booking_reference = $1;`, [ref]);
+    await recalculateBookingPaidAmount(client, ref);
     await client.query('COMMIT');
     res.status(201).json({ success: true, payment: pRes.rows[0] });
   } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: err.message }); } finally { client.release(); }
@@ -637,14 +1117,130 @@ app.delete('/api/payments/:payment_id', async (req, res) => {
     const { payment_id } = req.params;
     await client.query('BEGIN');
 
-    const paymentRes = await client.query('DELETE FROM reservation_payments WHERE payment_id = $1 RETURNING booking_reference', [payment_id]);
+    const paymentRes = await client.query('DELETE FROM reservation_payments WHERE payment_id = $1 RETURNING booking_reference, amount, payment_method', [payment_id]);
     if (paymentRes.rowCount === 0) throw new Error('Record not found.');
 
     const ref = paymentRes.rows[0].booking_reference;
-    await client.query(`UPDATE bookings b SET paid_amount = (SELECT COALESCE(SUM(amount), 0) FROM reservation_payments WHERE booking_reference = b.booking_reference) WHERE booking_reference = $1;`, [ref]);
+    await recalculateBookingPaidAmount(client, ref);
     await client.query('COMMIT');
     res.json({ success: true });
   } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: err.message }); } finally { client.release(); }
+});
+
+app.post('/api/reservations/:ref/charges', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { ref } = req.params;
+    const amount = Number(req.body.amount);
+    const description = String(req.body.description || '').trim();
+    const category = String(req.body.category || 'Ad Hoc').trim();
+    if (!Number.isFinite(amount) || amount <= 0 || !description) throw new Error('A positive amount and description are required.');
+    await client.query('BEGIN');
+    const booking = await client.query('SELECT booking_reference FROM bookings WHERE booking_reference = $1 FOR UPDATE', [ref]);
+    if (!booking.rowCount) throw new Error('Reservation not found.');
+    const charge = await client.query(`INSERT INTO reservation_charges (booking_reference, category, description, amount) VALUES ($1, $2, $3, $4) RETURNING *`, [ref, category, description, amount]);
+    await client.query('UPDATE bookings SET total_revenue = COALESCE(total_revenue, 0) + $1 WHERE booking_reference = $2', [amount, ref]);
+    await recalculateBookingPaidAmount(client, ref);
+    await client.query('COMMIT');
+    res.status(201).json({ success: true, charge: charge.rows[0] });
+  } catch (err) { await client.query('ROLLBACK'); res.status(400).json({ error: err.message }); } finally { client.release(); }
+});
+
+app.delete('/api/reservations/:ref/charges/:chargeId', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { ref, chargeId } = req.params;
+    await client.query('BEGIN');
+    const charge = await client.query('DELETE FROM reservation_charges WHERE charge_id = $1 AND booking_reference = $2 RETURNING amount', [chargeId, ref]);
+    if (!charge.rowCount) throw new Error('Charge not found.');
+    await client.query('UPDATE bookings SET total_revenue = COALESCE(total_revenue, 0) - $1 WHERE booking_reference = $2', [charge.rows[0].amount, ref]);
+    await recalculateBookingPaidAmount(client, ref);
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (err) { await client.query('ROLLBACK'); res.status(400).json({ error: err.message }); } finally { client.release(); }
+});
+
+app.post('/api/reservations/:ref/cards', async (req, res) => {
+  try {
+    const { ref } = req.params;
+    const { cardholder_name, card_brand, last_four, expiry_month, expiry_year } = req.body;
+    if (!String(cardholder_name || '').trim()) return res.status(400).json({ error: 'Cardholder name is required.' });
+    const result = await pool.query(`INSERT INTO booking_cards (booking_reference, cardholder_name, card_brand, last_four, expiry_month, expiry_year) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`, [ref, cardholder_name, card_brand || null, String(last_four || '').slice(-4), expiry_month || null, expiry_year || null]);
+    res.status(201).json({ success: true, card: result.rows[0] });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+app.delete('/api/reservations/:ref/cards/:cardId', async (req, res) => {
+  try { const result = await pool.query('DELETE FROM booking_cards WHERE card_id = $1 AND booking_reference = $2 RETURNING card_id', [req.params.cardId, req.params.ref]); if (!result.rowCount) return res.status(404).json({ error: 'Card not found.' }); res.json({ success: true }); } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/reservations/:ref/messages', async (req, res) => {
+  try { const text = String(req.body.message_text || '').trim(); if (!text) return res.status(400).json({ error: 'Message text is required.' }); const result = await pool.query('INSERT INTO booking_messages (booking_reference, message_type, message_text) VALUES ($1, $2, $3) RETURNING *', [req.params.ref, req.body.message_type || 'Internal Note', text]); res.status(201).json({ success: true, message: result.rows[0] }); } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+app.delete('/api/reservations/:ref/messages/:messageId', async (req, res) => {
+  try { const result = await pool.query('DELETE FROM booking_messages WHERE message_id = $1 AND booking_reference = $2 RETURNING message_id', [req.params.messageId, req.params.ref]); if (!result.rowCount) return res.status(404).json({ error: 'Message not found.' }); res.json({ success: true }); } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/reservations/:ref/waive', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { ref } = req.params;
+    await client.query('BEGIN');
+    const booking = await client.query(`
+      SELECT booking_reference, order_reference, total_revenue, paid_amount
+      FROM bookings WHERE booking_reference = $1 FOR UPDATE;
+    `, [ref]);
+    if (!booking.rowCount) throw new Error('Reservation not found.');
+    const balance = Math.max(0, Number(booking.rows[0].total_revenue || 0) - Number(booking.rows[0].paid_amount || 0));
+    if (balance <= 0) throw new Error('There is no positive balance to waive.');
+    const description = String(req.body.description || 'Balance waived by Finance').trim().slice(0, 500);
+    const waiver = await client.query(`
+      INSERT INTO reservation_payments (booking_reference, order_reference, amount, payment_method, description, payment_date)
+      VALUES ($1, $2, $3, 'Waive/Discount', $4, NOW()) RETURNING *;
+    `, [ref, booking.rows[0].order_reference || ref, -balance, description]);
+    await client.query(`
+      UPDATE bookings
+      SET paid_amount = COALESCE(total_revenue, 0)
+      WHERE booking_reference = $1;
+    `, [ref]);
+    await client.query('COMMIT');
+    res.status(201).json({ success: true, waiver: waiver.rows[0], waived_amount: balance });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(400).json({ error: err.message });
+  } finally { client.release(); }
+});
+
+app.post('/api/reservations/:ref/deposit-waive', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { ref } = req.params;
+    const requestedAmount = Number(req.body.amount);
+    if (!Number.isFinite(requestedAmount) || requestedAmount <= 0) throw new Error('A positive deposit waiver amount is required.');
+    await client.query('BEGIN');
+    const booking = await client.query(`
+      SELECT booking_reference, order_reference, COALESCE(other_revenue, 0) AS other_revenue,
+             COALESCE((SELECT SUM(-amount) FROM reservation_payments WHERE booking_reference = $1 AND payment_method = 'Deposit Waive/Discount'), 0) AS waived_deposit
+      FROM bookings WHERE booking_reference = $1 FOR UPDATE;
+    `, [ref]);
+    if (!booking.rowCount) throw new Error('Reservation not found.');
+    const deposit = Number(booking.rows[0].other_revenue || 0);
+    const waivedDeposit = Math.max(0, Number(booking.rows[0].waived_deposit || 0));
+    const remainingDeposit = Math.max(0, deposit - waivedDeposit);
+    const waiverAmount = Math.min(requestedAmount, remainingDeposit);
+    if (waiverAmount <= 0) throw new Error('There is no remaining deposit to waive.');
+    const description = String(req.body.description || 'Damage deposit waived by Finance').trim().slice(0, 500);
+    const waiver = await client.query(`
+      INSERT INTO reservation_payments (booking_reference, order_reference, amount, payment_method, description, payment_date)
+      VALUES ($1, $2, $3, 'Deposit Waive/Discount', $4, NOW()) RETURNING *;
+    `, [ref, booking.rows[0].order_reference || ref, -waiverAmount, description]);
+    await client.query('COMMIT');
+    res.status(201).json({ success: true, waiver: waiver.rows[0], waived_amount: waiverAmount, remaining_deposit: remainingDeposit - waiverAmount });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(400).json({ error: err.message });
+  } finally { client.release(); }
 });
 
 app.delete('/api/reservations/:ref', async (req, res) => {
@@ -653,6 +1249,9 @@ app.delete('/api/reservations/:ref', async (req, res) => {
     const { ref } = req.params;
     await client.query('BEGIN');
     await client.query('DELETE FROM reservation_payments WHERE booking_reference = $1', [ref]);
+    await client.query('DELETE FROM reservation_charges WHERE booking_reference = $1', [ref]);
+    await client.query('DELETE FROM booking_cards WHERE booking_reference = $1', [ref]);
+    await client.query('DELETE FROM booking_messages WHERE booking_reference = $1', [ref]);
     const result = await client.query('DELETE FROM bookings WHERE booking_reference = $1 RETURNING *', [ref]);
     if (result.rowCount === 0) throw new Error('Reservation not found.');
     await client.query('COMMIT');

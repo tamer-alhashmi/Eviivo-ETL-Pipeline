@@ -133,6 +133,11 @@ async function importBookings(filePath, groupName) {
             const totalRevenue = parseSafeFloat(row['Total Revenue']);
             const paidAmount = parseSafeFloat(row['Paid Amount']);
 
+            if (/^cancell?ed$/i.test(bookingStatus) && totalRevenue === 0 && paidAmount === 0) {
+              await client.query(`DELETE FROM bookings WHERE booking_reference = $1`, [bookingRef]);
+              continue;
+            }
+
             const query = `
               INSERT INTO bookings (
                 booking_reference, order_reference, property_name,
@@ -223,14 +228,16 @@ async function importPayments(filePath, groupName) {
         let insertedCount = 0;
         try {
           await client.query('BEGIN');
-          const sourceHeaders = Object.keys(rows[0] || {}).slice(38, 75);
+          const allHeaders = Object.keys(rows[0] || {});
+          const sourceHeaders = allHeaders.slice(38, 75);
           const sourceMapping = await ensureSourceColumns(client, 'payments', sourceHeaders, new Set(['id', 'payment_id', 'booking_reference', 'order_reference', 'received_date_time', 'guest_name', 'business_name', 'room_name', 'channel', 'channel_reference', 'payment_type', 'payment_method', 'property_name', 'currency', 'payment_status', 'payment_date', 'amount', 'created_at', 'raw_data']));
 
-          for (const row of rows) {
-            const rawPaymentId = String(row['PaymentID'] || row['Payment ID'] || '').trim();
-            // عمود AU: BookingReference بدون مسافات
-            const bookingRef = String(row['BookingReference'] || row['Booking Reference'] || '').trim();
+          for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+            const row = rows[rowIndex];
+            // Payment Report positions: AU = index 46, BD = index 55, BW = index 74.
+            const bookingRef = String(row['BookingReference'] || row['Booking Reference'] || row[allHeaders[46]] || '').trim();
             const orderRef = String(row['OrderReference'] || row['Order Ref.'] || '').trim();
+            const rawPaymentId = String(row['PaymentID'] || row['Payment ID'] || `PAYMENT-${bookingRef}-${rowIndex + 1}`).trim();
 
             // يجب وجود المعرفين معاً لتطبيق القيد المركب
             if (!rawPaymentId || !bookingRef) continue;
@@ -240,6 +247,7 @@ async function importPayments(filePath, groupName) {
             
             // قراءة القيمة من Direct1 أو Total Paid
             const amount = parseSafeFloat(
+              row[allHeaders[74]] ||
               row['Direct1'] || 
               row['Total Paid'] || 
               row['SettledAmount'] || 
@@ -249,7 +257,7 @@ async function importPayments(filePath, groupName) {
             );
 
             const currency = 'GBP';
-            const paymentMethod = (row['PaymentMethod'] || row['Payment Method'] || 'Card').trim();
+            const paymentMethod = String(row['PaymentMethod'] || row['Payment Method'] || row[allHeaders[55]] || '').trim();
             const paymentStatus = (row['PaymentType2'] || row['Payment Status'] || 'Success').trim();
             const paymentDate = parseSafeDate(row['ReceivedDateTime'] || row['Payment Date'] || row['BookedDate']);
 

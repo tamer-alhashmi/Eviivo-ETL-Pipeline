@@ -115,17 +115,20 @@
     .task-preview-shell { min-height: 18rem; background: rgba(2,6,23,.3); }
     .light-mode .task-shell { background: linear-gradient(145deg, #ffffff, #ecfeff); border-color: #99f6e4; }
     .light-mode .task-card { background: rgba(255,255,255,.9); border-color: #cbd5e1; }
+    .field-label { display: block; margin-bottom: .35rem; color: #94a3b8; font-size: .65rem; }
+    .field-control { width: 100%; border: 1px solid #334155; border-radius: .5rem; background: #020617; color: #f8fafc; padding: .45rem .55rem; font-size: .7rem; }
+    .field-control:disabled { opacity: .6; }
   </style>
 </head>
 
-<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-emerald-500 selection:text-white relative">
+<body class="bg-slate-50 dark:bg-[#0f172a] text-slate-800 dark:text-slate-100 min-h-screen font-sans antialiased selection:bg-emerald-500 selection:text-white relative">
   <div id="system-activity-rail" aria-hidden="true"></div>
   <div id="system-activity-chip" role="status" aria-live="polite"><span class="activity-orbit"></span><span id="system-activity-label">Updating workspace...</span></div>
 
   <!-- ===================================================================== -->
   <!-- [SECTION-01]: FULL-WIDTH APP BAR & GLOBAL NAVIGATION                  -->
   <!-- ===================================================================== -->
-  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur-md sticky top-0 z-40 px-4 py-3 no-print">
+  <header class="border-b border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md sticky top-0 z-40 px-4 py-3 no-print shadow-sm">
     <div class="w-full flex flex-wrap items-center justify-between gap-3">
       
       <div class="flex items-center gap-3 w-full md:w-auto">
@@ -133,34 +136,35 @@
           <i class="fa-solid fa-hotel text-white text-base"></i>
         </div>
         <div class="hidden md:block">
-          <h1 class="font-bold text-sm leading-tight text-white">Eviivo Operations</h1>
-          <p class="text-[10px] text-slate-400">Portfolio & Receivables</p>
+          <h1 class="font-semibold tracking-tight text-sm leading-tight text-slate-900 dark:text-white">Eviivo Operations</h1>
+          <p class="text-[10px] text-slate-500 dark:text-slate-400">Portfolio & Receivables</p>
         </div>
 
         <!-- Global Search Bar -->
         <div class="relative ml-2 flex-1 md:w-72">
           <i class="fa-solid fa-magnifying-glass absolute left-3 top-2 text-slate-400 text-xs"></i>
           <input type="text" id="global-booking-search" oninput="debounceGlobalSearch()" placeholder="Search guests, refs (e.g. John Doe or Doe John)..." 
-            class="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-lg pl-8 pr-8 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none transition">
+            class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-slate-400 focus:outline-none rounded-lg pl-8 pr-8 py-1.5 text-xs text-slate-900 dark:text-white placeholder-slate-500 shadow-sm transition">
           <button id="clear-search-btn" onclick="clearGlobalSearch()" class="hidden absolute right-2 top-1.5 text-slate-400 hover:text-white text-xs"><i class="fa-solid fa-circle-xmark"></i></button>
           <div id="search-dropdown-results" class="absolute left-0 right-0 top-full mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 max-h-96 overflow-y-auto hidden divide-y divide-slate-800"></div>
         </div>
       </div>
 
-      <nav class="flex items-center gap-1 bg-slate-950 border border-slate-800 p-1 rounded-lg text-xs font-medium overflow-x-auto">
+      <nav class="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-1 rounded-lg text-xs font-medium overflow-x-auto shadow-sm">
         <button id="tab-btn-analytics" onclick="switchTab('analytics')" class="px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition whitespace-nowrap"><i class="fa-solid fa-chart-pie mr-1"></i> Overview</button>
         <button id="tab-btn-unpaid" onclick="switchTab('unpaid')" class="px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition whitespace-nowrap"><i class="fa-solid fa-hand-holding-dollar mr-1 text-amber-400"></i> Unpaid</button>
         <button id="tab-btn-ops" onclick="switchTab('ops')" class="px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition whitespace-nowrap"><i class="fa-solid fa-bell-concierge mr-1"></i> Daily Handover</button>
         <button id="tab-btn-calendar" onclick="switchTab('calendar')" class="px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition whitespace-nowrap"><i class="fa-solid fa-calendar-days mr-1 text-indigo-400"></i> Calendar</button>
         <button id="tab-btn-ai-reports" onclick="switchTab('ai-reports')" class="px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition whitespace-nowrap"><i class="fa-solid fa-wand-magic-sparkles mr-1 text-cyan-300"></i> AI Reports</button>
         <button id="tab-btn-daily-tasks" onclick="switchTab('daily-tasks')" class="px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition whitespace-nowrap"><i class="fa-solid fa-arrows-rotate mr-1 text-emerald-300"></i> Daily Tasks</button>
+        <button id="tab-btn-reconciliation" onclick="switchTab('reconciliation')" class="px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition whitespace-nowrap"><i class="fa-solid fa-scale-balanced mr-1 text-amber-300"></i> Reconciliation</button>
       </nav>
 
       <div class="flex items-center gap-2">
-        <button id="theme-toggle-btn" onclick="toggleTheme()" class="w-8 h-8 inline-flex items-center justify-center text-xs rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition" title="Switch to light mode" aria-label="Switch color theme">
+        <button id="theme-toggle-btn" onclick="toggleTheme()" class="w-8 h-8 inline-flex items-center justify-center text-xs rounded-lg bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:bg-slate-700 dark:hover:bg-slate-100 border border-slate-700 dark:border-slate-200 transition" title="Switch to light mode" aria-label="Switch color theme">
           <i id="theme-toggle-icon" class="fa-solid fa-sun text-amber-300"></i>
         </button>
-        <button id="global-refresh-btn" onclick="triggerFullSystemRefresh()" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition flex items-center gap-1.5 shadow-sm active:scale-95" title="Refresh All Data">
+        <button id="global-refresh-btn" onclick="triggerFullSystemRefresh()" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:bg-slate-700 dark:hover:bg-slate-100 border border-slate-700 dark:border-slate-200 transition flex items-center gap-1.5 shadow-sm active:scale-95" title="Refresh All Data">
           <i id="global-refresh-icon" class="fa-solid fa-rotate text-emerald-400"></i><span class="hidden md:inline">Refresh</span>
         </button>
       </div>
@@ -187,46 +191,80 @@
         </div>
       </div>
       
-      <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm"><div class="flex items-center justify-between text-slate-400 text-[11px] font-bold uppercase"><span>Gross Booked</span><i class="fa-solid fa-file-invoice-dollar text-slate-500"></i></div><div class="mt-1.5 text-xl font-bold text-white" id="kpi-gross">£0.00</div><div class="mt-1 text-[10px] text-slate-400" id="kpi-bookings-count">0 bookings</div></div>
-        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm"><div class="flex items-center justify-between text-emerald-400 text-[11px] font-bold uppercase"><span>Collected Rev</span><i class="fa-solid fa-circle-check text-emerald-500"></i></div><div class="mt-1.5 text-xl font-bold text-emerald-400" id="kpi-collected">£0.00</div><div class="mt-1 text-[10px] text-emerald-500/80" id="kpi-collection-rate">0% settlement</div></div>
-        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm"><div class="flex items-center justify-between text-amber-400 text-[11px] font-bold uppercase"><span>Total Unpaid</span><i class="fa-solid fa-triangle-exclamation text-amber-500"></i></div><div class="mt-1.5 text-xl font-bold text-amber-400" id="kpi-outstanding">£0.00</div><div class="mt-1 text-[10px] text-amber-400/80" id="kpi-unpaid-stats">0 pending / partial</div></div>
-        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm"><div class="flex items-center justify-between text-indigo-400 text-[11px] font-bold uppercase"><span>Fully Settled</span><i class="fa-solid fa-shield-halved text-indigo-500"></i></div><div class="mt-1.5 text-xl font-bold text-indigo-400" id="kpi-settled-count">0</div><div class="mt-1 text-[10px] text-indigo-400/80">Reconciled Bookings</div></div>
+      <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-rose-950/40 border border-rose-500/40 rounded-xl p-4 shadow-lg"><div class="flex items-center justify-between text-rose-300 text-[11px] font-bold uppercase"><span>At-Risk Arrivals</span><i class="fa-solid fa-triangle-exclamation text-rose-400"></i></div><div class="mt-1.5 text-2xl font-bold text-rose-200" id="kpi-at-risk-arrivals">0</div><div class="mt-1 text-[10px] text-rose-300/80" id="kpi-at-risk-value">£0.00 due within 48 hours</div></div>
+        <div class="bg-orange-950/40 border border-orange-500/40 rounded-xl p-4 shadow-lg"><div class="flex items-center justify-between text-orange-300 text-[11px] font-bold uppercase"><span>Post-Departure Debt</span><i class="fa-solid fa-clock-rotate-left text-orange-400"></i></div><div class="mt-1.5 text-2xl font-bold text-orange-200" id="kpi-post-departure-debt">£0.00</div><div class="mt-1 text-[10px] text-orange-300/80" id="kpi-post-departure-count">0 departed guests outstanding</div></div>
+        <div class="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-4 shadow-lg"><div class="flex items-center justify-between text-emerald-300 text-[11px] font-bold uppercase"><span>Today's Settled Cash</span><i class="fa-solid fa-sack-dollar text-emerald-400"></i></div><div class="mt-1.5 text-2xl font-bold text-emerald-200" id="kpi-settled-cash">£0.00</div><div class="mt-1 text-[10px] text-emerald-300/80">Positive payments recorded today</div></div>
       </section>
 
       <section class="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg"><h2 class="text-xs font-bold text-slate-200 uppercase tracking-wide">Revenue vs Collections vs Unpaid (£)</h2><div class="h-56 mt-2"><canvas id="monthlyChart"></canvas></div></div>
-        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg flex flex-col justify-between"><h2 class="text-xs font-bold text-slate-200 uppercase tracking-wide mb-1">Channel Distribution</h2><div class="h-48 mt-2 w-full"><canvas id="channelChart"></canvas></div></div>
+        <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg"><div class="flex items-center justify-between"><h2 class="text-xs font-bold text-slate-200 uppercase tracking-wide">Future Booking Pace</h2><span class="text-[10px] text-slate-500">OTB revenue · next 90 days</span></div><div class="h-56 mt-2"><canvas id="monthlyChart"></canvas></div></div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg flex flex-col justify-between"><div class="flex items-center justify-between"><h2 class="text-xs font-bold text-slate-200 uppercase tracking-wide">Channel Dependency Risk</h2><span class="text-[10px] text-slate-500">Future OTB</span></div><div class="h-48 mt-2 w-full"><canvas id="channelChart"></canvas></div></div>
       </section>
 
       <section class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg w-full">
         <div class="p-3 border-b border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <h2 class="text-xs font-bold text-white uppercase tracking-wide"><i class="fa-solid fa-book-journal-whills mr-1"></i> Reconciliation Ledger</h2>
-          <div class="flex flex-wrap items-center gap-2">
-            <input type="text" id="filter-search" placeholder="Search ref or guest..." oninput="debounceSearch()" class="px-3 py-1 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none w-48">
-            <select id="filter-status" onchange="fetchReconciliation(0)" class="px-2.5 py-1 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none">
-              <option value="ALL">All Statuses</option><option value="Fully Paid">Fully Paid</option><option value="Partially Paid">Partially Paid</option><option value="Unpaid">Unpaid</option>
-            </select>
-            <select id="recon-name-sort" onchange="fetchReconciliation(0)" title="Sort Guest column" class="px-2.5 py-1 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none">
-              <option value="name_asc">Guest A-Z</option><option value="name_desc">Guest Z-A</option>
-            </select>
-            <label class="flex items-center gap-1 text-[10px] text-slate-300 whitespace-nowrap" title="Hide rows where Paid is zero"><input type="checkbox" id="recon-hide-zero-paid" onchange="fetchReconciliation(0)" class="accent-emerald-500"> Hide zero Paid</label>
-            <label class="flex items-center gap-1 text-[10px] text-slate-300 whitespace-nowrap" title="Hide rows with no note"><input type="checkbox" id="recon-hide-blank-notes" onchange="fetchReconciliation(0)" class="accent-amber-500"> Hide blank Notes</label>
-          </div>
+          <div><h2 class="text-xs font-bold text-white uppercase tracking-wide"><i class="fa-solid fa-shield-halved mr-1 text-amber-400"></i> Executive Exception Ledger</h2><p class="text-[10px] text-slate-500 mt-1">Only overdue debt, refund exposure, and missed cancellation penalties</p></div>
         </div>
         <div class="overflow-x-auto w-full">
           <table class="w-full text-left text-[11px] text-slate-300 table-compact">
-            <thead class="bg-slate-950 text-slate-400 font-semibold border-b border-slate-800 uppercase tracking-wide">
-              <tr><th>Property</th><th>Booking Ref</th><th>Guest</th><th>Check-In</th><th class="text-right">Booked</th><th class="text-right">Paid</th><th class="text-right">Balance Due</th><th class="text-center">Status</th></tr>
+            <thead class="bg-slate-100 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 text-xs uppercase tracking-wider font-semibold border-b border-slate-200 dark:border-slate-700">
+              <tr><th>Property</th><th>Booking Ref</th><th>Guest</th><th>Exception</th><th>Check-Out</th><th class="text-right">Booked</th><th class="text-right">Paid</th><th class="text-right">Exposure</th></tr>
             </thead>
             <tbody id="recon-tbody" class="divide-y divide-slate-800/60"></tbody>
           </table>
         </div>
         <div class="p-2 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
-          <span id="pagination-info">0 records</span>
+          <span id="pagination-info">0 exceptions</span>
           <div class="flex gap-2"><button id="btn-prev" onclick="changePage(-1)" class="px-2 py-0.5 bg-slate-800 rounded border border-slate-700">Prev</button><button id="btn-next" onclick="changePage(1)" class="px-2 py-0.5 bg-slate-800 rounded border border-slate-700">Next</button></div>
         </div>
       </section>
+    </div>
+
+    <!-- TAB 2: GOOGLE SHEETS RECONCILIATION -->
+    <div id="tab-content-reconciliation" class="hidden space-y-5">
+      <section class="bg-slate-900 border border-amber-500/30 rounded-xl p-4 shadow-xl">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div><div class="text-[10px] font-bold text-amber-300 uppercase tracking-wider"><i class="fa-solid fa-shield-halved mr-1"></i>Parallel run audit</div><h2 class="text-xl font-bold text-white mt-1">System versus Google Sheet</h2><p class="text-[11px] text-slate-400 mt-1">Cross-reference booking reference and check-in date within the sheet's date range.</p></div>
+          <div class="flex flex-wrap items-end gap-2">
+            <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Google Sheet ID</label><input id="reconciliation-sheet-id" value="1PY3DTpnFNTRsb-bbFiU8u7acXk7hlf9sqij6DGGAmAE" class="w-full md:w-80 bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-amber-400"></div>
+            <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Sheet Tab Name</label><input id="reconciliation-tab-name" value="In&Out 2026" class="w-44 bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-amber-400"></div>
+          </div>
+        </div>
+        <div class="mt-4 pt-3 border-t border-slate-800 flex flex-wrap items-end gap-3">
+          <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Audit Period</label><select id="reconciliation-date-preset" onchange="applyReconciliationDatePreset()" class="bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-2 py-1.5 min-w-[150px] focus:outline-none"><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="tomorrow">Tomorrow</option><option value="last7" selected>Last 7 Days</option><option value="custom">Custom Range</option></select></div>
+          <div id="reconciliation-custom-range" class="hidden flex flex-wrap items-end gap-3">
+            <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Start Date</label><input type="date" id="reconciliation-start-date" class="bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-2 py-1.5 focus:outline-none"></div>
+            <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">End Date</label><input type="date" id="reconciliation-end-date" class="bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-2 py-1.5 focus:outline-none"></div>
+          </div>
+          <div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Hotel</label><select id="reconciliation-property" class="bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-2 py-1.5 min-w-[170px] focus:outline-none"><option value="ALL">All Properties</option></select></div>
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-3 mt-4 pt-3 border-t border-slate-800">
+          <span id="reconciliation-status" class="text-[10px] text-slate-500" aria-live="polite">No reconciliation run yet.</span>
+          <div class="flex items-center gap-2"><button id="reconciliation-run-btn" onclick="runReconciliation()" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-lg"><i class="fa-solid fa-play mr-1"></i>Run Reconciliation</button><button onclick="exportReconciliation()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold rounded-lg"><i class="fa-solid fa-file-export mr-1 text-amber-300"></i>Export Discrepancies</button></div>
+        </div>
+      </section>
+
+      <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-rose-950/40 border border-rose-500/40 rounded-xl p-4 shadow-lg"><div class="flex items-center justify-between text-rose-300 text-[11px] font-bold uppercase"><span>Total Discrepancies</span><i class="fa-solid fa-triangle-exclamation"></i></div><div id="reconciliation-total" class="mt-1.5 text-2xl font-bold text-rose-200">0</div></div>
+        <div class="bg-orange-950/40 border border-orange-500/40 rounded-xl p-4 shadow-lg"><div class="flex items-center justify-between text-orange-300 text-[11px] font-bold uppercase"><span>Missing in System</span><i class="fa-solid fa-arrow-right-to-bracket"></i></div><div id="reconciliation-missing-system" class="mt-1.5 text-2xl font-bold text-orange-200">0</div><div class="mt-1 text-[10px] text-orange-300/80">Sheet only</div></div>
+        <div class="bg-sky-950/40 border border-sky-500/40 rounded-xl p-4 shadow-lg"><div class="flex items-center justify-between text-sky-300 text-[11px] font-bold uppercase"><span>Missing in Sheet</span><i class="fa-solid fa-arrow-right-from-bracket"></i></div><div id="reconciliation-missing-sheet" class="mt-1.5 text-2xl font-bold text-sky-200">0</div><div class="mt-1 text-[10px] text-sky-300/80">System only</div></div>
+      </section>
+
+      <section class="bg-slate-900 border border-cyan-500/30 rounded-xl p-4 shadow-xl">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+          <div><div class="text-[10px] font-bold text-cyan-300 uppercase tracking-wider"><i class="fa-solid fa-brain mr-1"></i>Executive Audit Brief</div><h2 class="text-lg font-bold text-white mt-1">Where the control exceptions are concentrated</h2><p id="reconciliation-brief-scope" class="text-[10px] text-slate-500 mt-1">Run an audit to generate the executive view.</p></div>
+          <div id="reconciliation-brief-icon" class="w-10 h-10 rounded-lg bg-slate-950 border border-slate-800 text-cyan-300 flex items-center justify-center"><i class="fa-solid fa-chart-line"></i></div>
+        </div>
+        <div id="reconciliation-brief-text" class="mt-4 text-sm text-slate-300">No executive insight is available yet.</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          <div><div class="flex items-center justify-between text-[10px] uppercase font-bold text-slate-400"><span>Discrepancy concentration</span><span id="reconciliation-brief-property-label">0%</span></div><div class="h-2 mt-1 bg-slate-950 rounded-full overflow-hidden"><div id="reconciliation-brief-property-bar" class="h-full bg-amber-400 transition-all" style="width:0%"></div></div></div>
+          <div><div class="flex items-center justify-between text-[10px] uppercase font-bold text-slate-400"><span>Failure-date concentration</span><span id="reconciliation-brief-date-label">0%</span></div><div class="h-2 mt-1 bg-slate-950 rounded-full overflow-hidden"><div id="reconciliation-brief-date-bar" class="h-full bg-cyan-400 transition-all" style="width:0%"></div></div></div>
+        </div>
+      </section>
+
+      <section class="bg-slate-900 border border-orange-500/20 rounded-xl overflow-hidden shadow-lg"><div class="p-3 border-b border-slate-800"><h2 class="text-xs font-bold text-white uppercase tracking-wide">Missing in System <span class="text-[10px] text-slate-500 normal-case">Exists in sheet, not in PostgreSQL</span></h2></div><div class="overflow-x-auto"><table class="w-full text-left text-[11px] table-compact"><thead class="bg-slate-950 text-slate-400 uppercase border-b border-slate-800"><tr><th>Booking Ref</th><th>Check-in Date</th><th>Guest Name</th><th class="text-right">Action</th></tr></thead><tbody id="reconciliation-missing-system-body" class="divide-y divide-slate-800 text-slate-300"><tr><td colspan="4" class="p-5 text-center text-slate-500">Run reconciliation to load results.</td></tr></tbody></table></div></section>
+      <section class="bg-slate-900 border border-sky-500/20 rounded-xl overflow-hidden shadow-lg"><div class="p-3 border-b border-slate-800"><h2 class="text-xs font-bold text-white uppercase tracking-wide">Missing in Sheet <span class="text-[10px] text-slate-500 normal-case">Exists in PostgreSQL, not in sheet</span></h2></div><div class="overflow-x-auto"><table id="reconciliation-missing-sheet-table" class="table-fixed w-full text-left text-sm table-compact select-text"><thead class="bg-slate-950 text-slate-400 uppercase border-b border-slate-800"><tr><th class="w-[100px]">Date</th><th class="w-[200px]">Flats</th><th class="w-1 px-0 border-0 opacity-0" aria-label="Hidden Column C"></th><th class="w-1 px-0 border-0 opacity-0">Check</th><th class="w-1 px-0 border-0 opacity-0">Out</th><th class="w-1 px-0 border-0 opacity-0">In</th><th class="w-[250px]">Notes</th><th class="w-[120px]">Phone</th><th class="w-[150px]">Name</th><th class="w-[60px]">Guest</th><th class="w-[60px]">Nights</th><th class="w-[100px]">Source</th><th class="w-[120px]">Payment</th><th class="w-[90px]">Room Rate</th><th class="w-[100px]">Status</th><th class="w-[90px]">Other Rev.</th><th class="w-[90px]">Total</th><th class="w-[130px]">Booking_Number</th><th data-column="METHOD_OF_PAYMENT" class="w-[160px] whitespace-normal break-words leading-tight">Method_of_Payment</th><th data-column="EMAIL" class="w-[180px] truncate">Email</th></tr></thead><tbody id="reconciliation-missing-sheet-body" class="divide-y divide-slate-800 text-slate-300 select-text"><tr><td colspan="20" class="p-5 text-center text-slate-500">Run reconciliation to load results.</td></tr></tbody></table></div></section>
     </div>
 
     <!-- TAB 2: AI REPORTS -->
@@ -318,7 +356,7 @@
         </div>
         <div class="overflow-x-auto w-full">
           <table class="w-full text-left text-[11px] border-collapse table-compact">
-            <thead class="bg-slate-950 text-slate-400 uppercase font-semibold border-b border-slate-800">
+            <thead class="bg-slate-100 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 text-xs uppercase tracking-wider font-semibold border-b border-slate-200 dark:border-slate-700">
               <tr><th>Ref / Unit</th><th>Guest</th><th>Notes</th><th>Hotel</th><th class="whitespace-nowrap">Stay Dates</th><th class="text-right whitespace-nowrap">Booked</th><th class="text-right whitespace-nowrap">Paid</th><th class="text-right whitespace-nowrap">Due</th></tr>
             </thead>
             <tbody id="unpaid-tbody" class="divide-y divide-slate-800 text-slate-300">
@@ -338,7 +376,7 @@
       <div class="bg-slate-900/90 p-4 rounded-xl border border-slate-800 shadow-xl space-y-3">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="flex flex-wrap items-center gap-3">
-            <div><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Property</label><select id="ops-property" onchange="fetchDailyOps()" class="bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-3 py-1.5 focus:outline-none min-w-[200px]"><option value="ALL">All Properties</option></select></div>
+            <div><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Property</label><select id="ops-property" multiple size="3" onchange="fetchDailyOps()" aria-label="Select one or more properties" class="bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-3 py-1.5 focus:outline-none min-w-[240px]"><option value="ALL">All Properties</option></select><div class="text-[9px] text-slate-500 mt-1">Select one or more hotels with Ctrl-click.</div></div>
             <div><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Target Date</label><input type="date" id="ops-date" onchange="fetchDailyOps()" class="bg-slate-950 border border-slate-700 text-slate-100 text-xs rounded-lg px-2 py-1.5 focus:outline-none" /></div>
             <div class="flex items-end gap-1.5 pt-4">
               <button onclick="setOpsDate(-1)" class="px-2.5 py-1.5 text-xs font-medium rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 transition">Yesterday</button>
@@ -402,18 +440,14 @@
               <span id="arrivals-hotel-subtitle" class="text-[10px] font-medium text-slate-300 bg-slate-800 px-2 py-0.5 rounded border border-slate-700 hidden"></span>
             </div>
             <div class="flex flex-wrap items-center gap-2">
-              <input type="search" id="ops-arrivals-filter" placeholder="Filter arrivals..." aria-label="Filter expected arrivals" oninput="filterOpsTable('ops-arrivals-tbody', this.value)" class="px-2.5 py-1 bg-slate-950 border border-slate-700 text-slate-200 text-[10px] rounded-md focus:outline-none focus:border-emerald-500 w-36 hide-on-screenshot">
-              <select id="ops-arrivals-name-sort" onchange="filterOpsTable('ops-arrivals-tbody')" title="Sort Guest column" class="px-2 py-1 bg-slate-950 border border-slate-700 text-slate-200 text-[10px] rounded-md focus:outline-none hide-on-screenshot"><option value="name_asc">Guest A-Z</option><option value="name_desc">Guest Z-A</option></select>
-              <label class="flex items-center gap-1 text-[10px] text-slate-300 whitespace-nowrap hide-on-screenshot" title="Hide rows where Paid is zero"><input type="checkbox" id="ops-arrivals-hide-zero-paid" onchange="filterOpsTable('ops-arrivals-tbody')" class="accent-emerald-500"> 0 Paid</label>
-              <label class="flex items-center gap-1 text-[10px] text-slate-300 whitespace-nowrap hide-on-screenshot" title="Hide rows with no note"><input type="checkbox" id="ops-arrivals-hide-blank-notes" onchange="filterOpsTable('ops-arrivals-tbody')" class="accent-amber-500"> Blank Notes</label>
               <button onclick="captureUltraScreenshot('arrivals-capture-area', 'Arrivals')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-md border border-slate-700 transition flex items-center gap-1.5 hide-on-screenshot"><i class="fa-solid fa-camera text-emerald-400"></i><span>Screenshot</span></button>
               <span id="badge-arrivals-count" class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">0 Guests</span>
             </div>
           </div>
           <div class="overflow-x-auto w-full">
-            <table class="w-full text-left text-[11px] border-collapse table-compact">
-              <thead class="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
-                <tr><th>Ref / Unit</th><th>Guest Name</th><th>Note / Group</th><th>Phone / Contact</th><th>Stay Dates</th><th>Channel</th><th class="text-right">Booked</th><th class="text-right">Paid</th><th class="text-right">Balance Due</th><th class="text-center">Status</th></tr>
+            <table id="expected-arrivals-table" class="w-full text-left text-[11px] border-collapse table-compact">
+              <thead class="bg-slate-100 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 text-xs uppercase tracking-wider font-semibold border-b border-slate-200 dark:border-slate-700">
+                <tr><th class="w-[110px]">Ref / Unit</th><th class="w-[150px]">Guest Name</th><th class="w-[170px]">Note / Group</th><th class="w-[140px]">Phone / Contact</th><th class="w-[150px]">Stay Dates</th><th class="w-[100px]">Channel</th><th class="w-[85px] text-right">Booked</th><th class="w-[85px] text-right">Paid</th><th class="w-[100px] text-right">Balance Due</th><th class="w-[120px] text-center">Status</th></tr>
               </thead>
               <tbody id="ops-arrivals-tbody" class="divide-y divide-slate-800 text-slate-300">
                 <tr><td colspan="10" class="py-6 text-center text-slate-500">Select a date & property.</td></tr>
@@ -440,7 +474,7 @@
           </div>
           <div class="overflow-x-auto w-full">
             <table class="w-full text-left text-[11px] border-collapse table-compact">
-              <thead class="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
+              <thead class="bg-slate-100 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 text-xs uppercase tracking-wider font-semibold border-b border-slate-200 dark:border-slate-700">
                 <tr><th>Ref / Unit</th><th>Guest Name</th><th>Note / Group</th><th>Phone / Contact</th><th>Stay Dates</th><th>Channel</th><th class="text-right">Booked</th><th class="text-right">Paid</th><th class="text-right">Balance Due</th><th class="text-center">Status</th></tr>
               </thead>
               <tbody id="ops-departures-tbody" class="divide-y divide-slate-800 text-slate-300">
@@ -489,24 +523,24 @@
     <!-- Panels will be injected here dynamically by JavaScript -->
   </div>
   <div id="new-booking-modal" class="hidden fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 no-print">
-    <form id="new-booking-form" onsubmit="saveNewBooking(event)" class="w-full max-w-3xl max-h-[92vh] overflow-y-auto bg-slate-900 border border-slate-700 rounded-xl shadow-2xl">
+    <form id="new-booking-form" onsubmit="saveNewBooking(event)" class="w-full max-w-3xl max-h-[92vh] overflow-y-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded-xl shadow-2xl">
       <div class="flex items-center justify-between px-5 py-4 border-b border-slate-800"><div><h2 class="text-base font-bold text-white"><i class="fa-solid fa-calendar-plus text-emerald-400 mr-2"></i>New Booking</h2><p class="text-[10px] text-slate-400 mt-1">Create a reservation and place it on the calendar.</p></div><button type="button" onclick="closeNewBookingModal()" class="text-slate-400 hover:text-white text-xl" aria-label="Close">&times;</button></div>
       <div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-        <div><label class="block text-slate-400 mb-1">Booking Reference <span class="text-slate-600">(optional)</span></label><input name="booking_reference" placeholder="Auto-generated if blank" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
-        <div><label class="block text-slate-400 mb-1">Booking Status</label><select name="booking_status" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"><option value="Confirmed">Confirmed</option><option value="Canceled">Canceled</option></select></div>
-        <div><label class="block text-slate-400 mb-1">Property *</label><select id="new-booking-property" name="property_name" onchange="populateNewBookingRooms()" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></select></div>
-        <div><label class="block text-slate-400 mb-1">Room / Unit *</label><select id="new-booking-room" name="room_unit_name" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"><option value="">Select a property first</option></select></div>
-        <div><label class="block text-slate-400 mb-1">Guest Name *</label><input name="guest_name" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
-        <div><label class="block text-slate-400 mb-1">Channel</label><input name="channel" value="Direct" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
-        <div><label class="block text-slate-400 mb-1">Check-in *</label><input id="new-booking-check-in" type="date" name="check_in" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
-        <div><label class="block text-slate-400 mb-1">Check-out *</label><input id="new-booking-check-out" type="date" name="check_out" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
-        <div><label class="block text-slate-400 mb-1">Total Revenue (£)</label><input type="number" name="total_revenue" min="0" step="0.01" value="0" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
-        <div><label class="block text-slate-400 mb-1">Initial Paid (£)</label><input type="number" name="paid_amount" min="0" step="0.01" value="0" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
-        <div><label class="block text-slate-400 mb-1">Phone</label><input name="telephone" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
-        <div><label class="block text-slate-400 mb-1">Email</label><input type="email" name="email" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
-        <div><label class="block text-slate-400 mb-1">Adults</label><input type="number" name="adults" min="1" step="1" value="1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
-        <div><label class="block text-slate-400 mb-1">Children</label><input type="number" name="children" min="0" step="1" value="0" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white"></div>
-        <div class="md:col-span-2"><label class="block text-slate-400 mb-1">Remarks / Notes</label><textarea name="notes" rows="3" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white" placeholder="Add arrival instructions, guest requests, or internal notes"></textarea></div>
+        <div><label class="block text-slate-600 dark:text-slate-400 mb-1">Booking Reference <span class="text-slate-500">(optional)</span></label><input name="booking_reference" placeholder="Auto-generated if blank" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm rounded-lg px-3 py-2"></div>
+        <div><label class="block text-slate-600 dark:text-slate-400 mb-1">Booking Status</label><select name="booking_status" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm rounded-lg px-3 py-2"><option value="Confirmed">Confirmed</option><option value="Canceled">Canceled</option></select></div>
+        <div><label class="block text-slate-600 dark:text-slate-400 mb-1">Property *</label><select id="new-booking-property" name="property_name" onchange="populateNewBookingRooms()" required class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm rounded-lg px-3 py-2"></select></div>
+        <div><label class="block text-slate-600 dark:text-slate-400 mb-1">Room / Unit *</label><select id="new-booking-room" name="room_unit_name" required class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm rounded-lg px-3 py-2"><option value="">Select a property first</option></select></div>
+        <div><label class="block text-slate-600 dark:text-slate-400 mb-1">Guest Name *</label><input name="guest_name" required class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm rounded-lg px-3 py-2"></div>
+        <div><label class="block text-slate-600 dark:text-slate-400 mb-1">Channel</label><input name="channel" value="Direct" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm rounded-lg px-3 py-2"></div>
+        <div><label class="block text-slate-600 dark:text-slate-400 mb-1">Check-in *</label><input id="new-booking-check-in" type="date" name="check_in" required class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm rounded-lg px-3 py-2"></div>
+        <div><label class="block text-slate-600 dark:text-slate-400 mb-1">Check-out *</label><input id="new-booking-check-out" type="date" name="check_out" required class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm rounded-lg px-3 py-2"></div>
+        <div><label class="block text-slate-600 dark:text-slate-400 mb-1">Total Revenue (£)</label><input type="number" name="total_revenue" min="0" step="0.01" value="0" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm rounded-lg px-3 py-2"></div>
+        <div><label class="block text-slate-600 dark:text-slate-400 mb-1">Initial Paid (£)</label><input type="number" name="paid_amount" min="0" step="0.01" value="0" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm rounded-lg px-3 py-2"></div>
+        <div><label class="block text-slate-600 dark:text-slate-400 mb-1">Phone</label><input name="telephone" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm rounded-lg px-3 py-2"></div>
+        <div><label class="block text-slate-600 dark:text-slate-400 mb-1">Email</label><input type="email" name="email" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm rounded-lg px-3 py-2"></div>
+        <div><label class="block text-slate-600 dark:text-slate-400 mb-1">Adults</label><input type="number" name="adults" min="1" step="1" value="1" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm rounded-lg px-3 py-2"></div>
+        <div><label class="block text-slate-600 dark:text-slate-400 mb-1">Children</label><input type="number" name="children" min="0" step="1" value="0" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm rounded-lg px-3 py-2"></div>
+        <div class="md:col-span-2"><label class="block text-slate-600 dark:text-slate-400 mb-1">Remarks / Notes</label><textarea name="notes" rows="3" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm rounded-lg px-3 py-2" placeholder="Add arrival instructions, guest requests, or internal notes"></textarea></div>
       </div>
       <div class="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-800"><button type="button" onclick="closeNewBookingModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg">Cancel</button><button id="new-booking-submit" type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg"><i class="fa-solid fa-check mr-1"></i>Create Booking</button></div>
     </form>
@@ -535,15 +569,133 @@
     let healthChartInstance = null;
     let aiReportChartInstance = null;
     let currentAiReport = { type: 'daily_sales', rows: [], columns: [], title: 'No report loaded' };
+    let currentReconciliation = { missing_in_system: [], missing_in_sheet: [], summary: {} };
 
     const fmt = (num) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(num || 0);
     const setElText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
     const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
     const encodeBookingData = (booking) => encodeURIComponent(JSON.stringify(booking)).replace(/'/g, '%27');
+    const depositBadge = (booking) => {
+      const remaining = Math.max(0, parseFloat(booking.deposit_balance || 0));
+      const waived = Math.max(0, parseFloat(booking.deposit_waived || 0));
+      if (!remaining && !waived) return '';
+      return `<span class="ops-note-pill ${remaining ? 'bg-rose-950/70 border border-rose-700/70 text-rose-200' : 'bg-emerald-950/70 border border-emerald-700/70 text-emerald-200'}">${remaining ? `Deposit due ${fmt(remaining)}` : `Deposit waived ${fmt(waived)}`}</span>`;
+    };
     const roomLabel = (value) => {
       const room = String(value || '').trim();
       return room ? (room.toLowerCase().startsWith('room ') ? room : `Room ${room}`) : 'Room -';
     };
+
+    class SmartTableFilter {
+      constructor(table) {
+        this.table = table;
+        this.states = new Map();
+        this.activeDropdown = null;
+        this.headers = Array.from(table.querySelectorAll('thead th'));
+        this.headers.forEach((header, columnIndex) => {
+          header.classList.add('relative');
+          if (!header.classList.contains('whitespace-normal')) header.classList.add('whitespace-nowrap');
+          if (!header.querySelector('.smart-table-filter-trigger')) {
+            const trigger = document.createElement('button');
+            trigger.type = 'button';
+            trigger.className = 'smart-table-filter-trigger ml-1 inline-flex items-center justify-center text-slate-500 hover:text-amber-300 transition';
+            trigger.title = 'Filter or sort column';
+            trigger.setAttribute('aria-label', `Filter or sort ${header.dataset.column || header.textContent.trim() || `column ${columnIndex + 1}`}`);
+            trigger.innerHTML = '<svg viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3" aria-hidden="true"><path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h11a1.5 1.5 0 0 1 1.17 2.44l-4.42 5.52v4.54a1 1 0 0 1-.55.89l-3 1.5A1 1 0 0 1 7.25 17v-6.04L2.83 5.44A1.5 1.5 0 0 1 3 4.5Z"/></svg>';
+            trigger.addEventListener('click', event => { event.stopPropagation(); this.toggleDropdown(columnIndex, trigger); });
+            header.appendChild(trigger);
+          }
+        });
+        this.refresh();
+      }
+
+      getRows() {
+        return Array.from(this.table.querySelectorAll('tbody tr')).filter(row => !row.querySelector('td[colspan]'));
+      }
+
+      refresh() {
+        this.rows = this.getRows();
+        this.applyFilters();
+      }
+
+      cellValue(row, columnIndex) {
+        return String(row.cells[columnIndex]?.textContent || '').trim();
+      }
+
+      compareValues(left, right) {
+        const datePattern = /^\d{2}\/\d{2}\/\d{4}$/;
+        const parseDate = value => { const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return match ? Date.UTC(Number(match[3]), Number(match[2]) - 1, Number(match[1])) : null; };
+        if (datePattern.test(left) && datePattern.test(right)) return parseDate(left) - parseDate(right);
+        const leftNumber = Number(left.replace(/[^\d.-]/g, ''));
+        const rightNumber = Number(right.replace(/[^\d.-]/g, ''));
+        if (left !== '' && right !== '' && Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) return leftNumber - rightNumber;
+        return left.localeCompare(right, undefined, { sensitivity: 'base', numeric: true });
+      }
+
+      sort(columnIndex, direction) {
+        const body = this.table.tBodies[0];
+        const rows = this.getRows().sort((left, right) => direction * this.compareValues(this.cellValue(left, columnIndex), this.cellValue(right, columnIndex)));
+        rows.forEach(row => body.appendChild(row));
+        this.rows = this.getRows();
+        this.applyFilters();
+      }
+
+      toggleDropdown(columnIndex, trigger) {
+        if (this.activeDropdown) this.activeDropdown.remove();
+        const dropdown = this.createDropdown(columnIndex);
+        trigger.parentElement.appendChild(dropdown);
+        this.activeDropdown = dropdown;
+      }
+
+      createDropdown(columnIndex) {
+        const dropdown = document.createElement('div');
+        dropdown.className = 'smart-table-filter-menu absolute left-0 top-full mt-1 z-[80] w-64 bg-gray-800 text-white border border-gray-600 rounded-lg shadow-2xl p-2 font-normal normal-case tracking-normal';
+        const current = this.states.get(columnIndex) || new Set(this.getUniqueValues(columnIndex));
+        const values = this.getUniqueValues(columnIndex);
+        this.states.set(columnIndex, new Set(current));
+        dropdown.innerHTML = `<div class="flex items-center gap-1 pb-2 border-b border-gray-600"><button type="button" data-sort="asc" class="flex-1 px-2 py-1.5 text-[10px] rounded hover:bg-gray-700 text-left"><span class="mr-1">↑</span>Sort A to Z</button><button type="button" data-sort="desc" class="flex-1 px-2 py-1.5 text-[10px] rounded hover:bg-gray-700 text-left"><span class="mr-1">↓</span>Sort Z to A</button></div><div class="relative mt-2"><svg viewBox="0 0 20 20" fill="currentColor" class="absolute left-2 top-2 w-3 h-3 text-slate-400"><path fill-rule="evenodd" d="M8.5 3a5.5 5.5 0 1 0 3.48 9.76l3.63 3.63 1.06-1.06-3.63-3.63A5.5 5.5 0 0 0 8.5 3Zm0 1.5a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z" clip-rule="evenodd"/></svg><input data-search type="search" placeholder="Search values" class="w-full bg-gray-900 border border-gray-600 rounded px-7 py-1.5 text-[10px] text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"></div><div class="flex items-center justify-between py-2 text-[10px]"><button type="button" data-select-all class="text-cyan-300 hover:text-cyan-200">Select all</button><button type="button" data-clear-all class="text-amber-300 hover:text-amber-200">Clear</button></div><div data-values class="max-h-48 overflow-y-auto border-y border-gray-700 py-1"></div><div class="flex items-center justify-end gap-2 pt-2"><button type="button" data-cancel class="px-3 py-1.5 text-[10px] rounded border border-gray-600 hover:bg-gray-700">Cancel</button><button type="button" data-ok class="px-3 py-1.5 text-[10px] rounded bg-amber-600 hover:bg-amber-500 font-semibold">OK</button></div>`;
+        const valueBox = dropdown.querySelector('[data-values]');
+        const renderValues = search => {
+          const query = search.toLowerCase();
+          valueBox.innerHTML = values.filter(value => value.toLowerCase().includes(query)).map(value => `<label class="flex items-center gap-2 px-2 py-1 text-[10px] hover:bg-gray-700 cursor-pointer"><input type="checkbox" value="${escapeHtml(value)}" ${current.has(value) ? 'checked' : ''} class="accent-amber-500"><span class="truncate" title="${escapeHtml(value)}">${escapeHtml(value || '(Blank)')}</span></label>`).join('') || '<div class="px-2 py-3 text-center text-[10px] text-slate-500">No matching values</div>';
+        };
+        renderValues('');
+        dropdown.querySelector('[data-search]').addEventListener('input', event => renderValues(event.target.value));
+        dropdown.querySelector('[data-values]').addEventListener('change', event => { if (event.target.matches('input')) { if (event.target.checked) current.add(event.target.value); else current.delete(event.target.value); } });
+        dropdown.querySelector('[data-select-all]').addEventListener('click', () => { values.forEach(value => current.add(value)); renderValues(dropdown.querySelector('[data-search]').value); });
+        dropdown.querySelector('[data-clear-all]').addEventListener('click', () => { current.clear(); renderValues(dropdown.querySelector('[data-search]').value); });
+        dropdown.querySelector('[data-sort="asc"]').addEventListener('click', () => { this.sort(columnIndex, 1); dropdown.remove(); this.activeDropdown = null; });
+        dropdown.querySelector('[data-sort="desc"]').addEventListener('click', () => { this.sort(columnIndex, -1); dropdown.remove(); this.activeDropdown = null; });
+        dropdown.querySelector('[data-cancel]').addEventListener('click', () => { dropdown.remove(); this.activeDropdown = null; });
+        dropdown.querySelector('[data-ok]').addEventListener('click', () => { this.states.set(columnIndex, new Set(current)); this.applyFilters(); dropdown.remove(); this.activeDropdown = null; });
+        return dropdown;
+      }
+
+      getUniqueValues(columnIndex) {
+        return [...new Set(this.getRows().map(row => this.cellValue(row, columnIndex)))].sort((left, right) => this.compareValues(left, right));
+      }
+
+      applyFilters() {
+        this.getRows().forEach(row => {
+          const visible = [...this.states.entries()].every(([columnIndex, allowed]) => allowed.size === 0 ? false : allowed.has(this.cellValue(row, columnIndex)));
+          row.classList.toggle('hidden', !visible);
+        });
+      }
+    }
+
+    function initializeSmartFilters(tableElement) {
+      const table = typeof tableElement === 'string' ? document.querySelector(tableElement) : tableElement;
+      if (!table) return null;
+      if (!table._smartTableFilter) table._smartTableFilter = new SmartTableFilter(table);
+      else table._smartTableFilter.refresh();
+      return table._smartTableFilter;
+    }
+
+    document.addEventListener('click', event => {
+      document.querySelectorAll('.smart-table-filter-menu').forEach(menu => {
+        if (!menu.contains(event.target) && !event.target.closest('.smart-table-filter-trigger')) menu.remove();
+      });
+    });
 
     let activeRequests = 0;
     let activityTimer = null;
@@ -595,8 +747,7 @@
     // --- ESCAPE KEY LISTENER ---
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        const panels = document.getElementById('multi-panel-container');
-        if(panels) panels.innerHTML = ''; 
+        closeUniversalPanels();
         closeSearchDropdown();
       }
     });
@@ -620,14 +771,14 @@
     // --- TABS & REFRESH LOGIC ---
     function switchTab(tab) {
       activeTab = tab;
-      ['analytics', 'unpaid', 'ops', 'cal', 'ai-reports', 'daily-tasks'].forEach(t => {
+      ['analytics', 'unpaid', 'ops', 'cal', 'ai-reports', 'daily-tasks', 'reconciliation'].forEach(t => {
         const c = document.getElementById(`tab-content-${t}`);
         const b = document.getElementById(`tab-btn-${t === 'cal' ? 'calendar' : t}`);
         if(c) c.classList.add('hidden');
         if(b) b.className = 'px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition whitespace-nowrap';
       });
       document.getElementById(`tab-content-${tab === 'calendar' ? 'cal' : tab}`).classList.remove('hidden');
-      const btnMap = { 'analytics': 'bg-emerald-600', 'unpaid': 'bg-amber-600', 'ops': 'bg-emerald-600', 'calendar': 'bg-indigo-600', 'ai-reports': 'bg-cyan-600', 'daily-tasks': 'bg-emerald-600' };
+      const btnMap = { 'analytics': 'bg-emerald-600', 'unpaid': 'bg-amber-600', 'ops': 'bg-emerald-600', 'calendar': 'bg-indigo-600', 'ai-reports': 'bg-cyan-600', 'daily-tasks': 'bg-emerald-600', 'reconciliation': 'bg-amber-600' };
       document.getElementById(`tab-btn-${tab}`).className = `px-3 py-1.5 rounded-md text-white font-semibold transition whitespace-nowrap ${btnMap[tab]}`;
 
       if (tab === 'analytics') loadAllAnalytics();
@@ -636,19 +787,158 @@
       if (tab === 'calendar') fetchCalendarGrid();
       if (tab === 'ai-reports' && !currentAiReport.rows.length) runAiReport();
       if (tab === 'daily-tasks') loadTaskWorkspace();
+      if (tab === 'reconciliation') runReconciliation();
     }
 
     async function triggerFullSystemRefresh() {
       const btn = document.getElementById('global-refresh-btn');
       btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-emerald-400"></i> <span class="hidden md:inline">Refreshing...</span>`;
-      await loadPropertiesList();
-      if (activeTab === 'analytics') loadAllAnalytics();
-      if (activeTab === 'unpaid') fetchUnpaidReservations(unpaidOffset);
-      if (activeTab === 'ops') fetchDailyOps();
-      if (activeTab === 'calendar') fetchCalendarGrid();
-      if (activeTab === 'ai-reports') runAiReport();
-      if (activeTab === 'daily-tasks') loadTaskWorkspace();
-      setTimeout(() => { btn.innerHTML = `<i class="fa-solid fa-rotate text-emerald-400"></i> <span class="hidden md:inline">Refresh</span>`; }, 500);
+      try {
+        await loadPropertiesList();
+        if (activeTab === 'analytics') await loadAllAnalytics();
+        if (activeTab === 'unpaid') await fetchUnpaidReservations(unpaidOffset);
+        if (activeTab === 'ops') await fetchDailyOps();
+        if (activeTab === 'calendar') await fetchCalendarGrid();
+        if (activeTab === 'ai-reports') await runAiReport();
+        if (activeTab === 'daily-tasks') await loadTaskWorkspace();
+        if (activeTab === 'reconciliation') await runReconciliation();
+        const query = document.getElementById('global-booking-search')?.value.trim();
+        if (query) await executeGlobalSearch(query); else closeSearchDropdown();
+      } finally {
+        btn.innerHTML = `<i class="fa-solid fa-rotate text-emerald-400"></i> <span class="hidden md:inline">Refresh</span>`;
+      }
+    }
+
+    function renderReconciliationTable() {
+      const missingSystemBody = document.getElementById('reconciliation-missing-system-body');
+      const missingSheetBody = document.getElementById('reconciliation-missing-sheet-body');
+      const missingSystem = currentReconciliation.missing_in_system || [];
+      const missingSheet = currentReconciliation.missing_in_sheet || [];
+      missingSystemBody.innerHTML = missingSystem.length ? missingSystem.map(row => `<tr><td class="font-mono text-amber-300">${escapeHtml(row.booking_reference)}</td><td>${escapeHtml(row.check_in)}</td><td>${escapeHtml(row.guest_name || '-')}</td><td class="text-right"><button onclick="event.stopPropagation(); alert('Resolve/Flag integration is reserved for a future workflow.')" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-[10px] text-amber-200">Resolve/Flag</button></td></tr>`).join('') : '<tr><td colspan="4" class="p-5 text-center text-emerald-300">No sheet-only discrepancies.</td></tr>';
+      missingSheetBody.innerHTML = missingSheet.length ? missingSheet.map(row => {
+        const encoded = encodeBookingData(row);
+        const date = formatReconciliationPasteDate(row.check_in);
+        const flats = [row.property_name, row.room_unit_name ? `(${row.room_unit_name})` : ''].filter(Boolean).join(' ');
+        const roomRate = row.room_rate ?? row.price_per_night ?? '';
+        const otherRevenue = row.other_revenue ?? (roomRate !== '' && row.total_price !== '' && row.total_price != null ? Number(row.total_price) - Number(roomRate) : '');
+        return `<tr class="cursor-pointer hover:bg-slate-700/60 transition select-text" onclick="openUniversalModal('${encoded}')" title="Click to inspect booking">
+          <td>${escapeHtml(date)}</td>
+          <td class="whitespace-normal">${escapeHtml(flats)}</td>
+          <td class="w-1 px-0 border-0 opacity-0"></td>
+          <td class="w-1 px-0 border-0 opacity-0"></td>
+          <td class="w-1 px-0 border-0 opacity-0"></td>
+          <td class="w-1 px-0 border-0 opacity-0"></td>
+          <td class="truncate max-w-[250px]" title="${escapeHtml(row.booking_notes || row.notes || '')}">${escapeHtml(row.booking_notes || row.notes || '')}</td>
+          <td class="truncate">${escapeHtml(row.guest_phone || '')}</td>
+          <td class="truncate">${escapeHtml(row.guest_name || '')}</td>
+          <td>${escapeHtml(row.number_of_guests ?? '')}</td>
+          <td>${escapeHtml(row.nights ?? '')}</td>
+          <td class="truncate">${escapeHtml(row.booking_source || '')}</td>
+          <td>${escapeHtml(row.payment_status || '')}</td>
+          <td>${escapeHtml(roomRate)}</td>
+          <td>${escapeHtml(row.status || '')}</td>
+          <td>${escapeHtml(otherRevenue)}</td>
+          <td>${escapeHtml(row.total_price ?? '')}</td>
+          <td>${escapeHtml(row.booking_reference || '')}</td>
+          <td>${escapeHtml(row.payment_method || '')}</td>
+          <td class="truncate">${escapeHtml(row.guest_email || '')}</td>
+        </tr>`;
+      }).join('') : '<tr><td colspan="20" class="p-5 text-center text-emerald-300">No system-only discrepancies.</td></tr>';
+      initializeSmartFilters('#reconciliation-missing-sheet-table');
+    }
+
+    function formatReconciliationPasteDate(value) {
+      const match = String(value || '').slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
+    }
+
+    function reconciliationDateKey(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    function applyReconciliationDatePreset() {
+      const preset = document.getElementById('reconciliation-date-preset')?.value || 'last7';
+      const customRange = document.getElementById('reconciliation-custom-range');
+      const startInput = document.getElementById('reconciliation-start-date');
+      const endInput = document.getElementById('reconciliation-end-date');
+      if (customRange) customRange.classList.toggle('hidden', preset !== 'custom');
+      if (preset === 'custom') return;
+      const end = new Date();
+      const start = new Date(end);
+      if (preset === 'yesterday') { start.setDate(start.getDate() - 1); end.setDate(end.getDate() - 1); }
+      if (preset === 'tomorrow') { start.setDate(start.getDate() + 1); end.setDate(end.getDate() + 1); }
+      if (preset === 'last7') start.setDate(start.getDate() - 6);
+      startInput.value = reconciliationDateKey(start);
+      endInput.value = reconciliationDateKey(end);
+    }
+
+    function renderReconciliationBrief(result) {
+      const insights = result.insights || {};
+      const total = Number(result.summary?.total_discrepancies || insights.total_count || 0);
+      const propertyInsight = insights.property_with_most_errors;
+      const dateInsight = insights.date_with_highest_failure_rate;
+      const propertyShare = total && propertyInsight ? Math.round((propertyInsight.count / total) * 100) : 0;
+      const dateShare = total && dateInsight ? Math.round((dateInsight.count / total) * 100) : 0;
+      const propertyScope = result.property_name && result.property_name !== 'ALL' ? result.property_name : 'all properties';
+      setElText('reconciliation-brief-scope', `${propertyScope} · ${result.date_range?.from || '-'} to ${result.date_range?.to || '-'}`);
+      setElText('reconciliation-brief-property-label', `${propertyShare}%`);
+      setElText('reconciliation-brief-date-label', `${dateShare}%`);
+      const propertyBar = document.getElementById('reconciliation-brief-property-bar');
+      const dateBar = document.getElementById('reconciliation-brief-date-bar');
+      if (propertyBar) propertyBar.style.width = `${propertyShare}%`;
+      if (dateBar) dateBar.style.width = `${dateShare}%`;
+      const text = total === 0
+        ? 'No control exceptions were identified in the selected audit scope.'
+        : `${total} discrepancy${total === 1 ? '' : 'ies'} identified. ${propertyInsight ? `The highest concentration is ${propertyInsight.count} at ${propertyInsight.property}.` : ''} ${dateInsight ? `The highest failure date is ${dateInsight.date} with ${dateInsight.count} exception${dateInsight.count === 1 ? '' : 's'} (${Math.round(dateInsight.rate * 100)}% of records on that date).` : ''}`;
+      setElText('reconciliation-brief-text', text);
+    }
+
+    async function runReconciliation() {
+      const button = document.getElementById('reconciliation-run-btn');
+      const status = document.getElementById('reconciliation-status');
+      button.disabled = true;
+      button.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Running...';
+      status.textContent = 'Reading Google Sheet and bounded database range...';
+      try {
+        const preset = document.getElementById('reconciliation-date-preset').value;
+        if (preset !== 'custom') applyReconciliationDatePreset();
+        const startDate = document.getElementById('reconciliation-start-date').value;
+        const endDate = document.getElementById('reconciliation-end-date').value;
+        if (!startDate || !endDate) throw new Error('Select a valid reconciliation date range.');
+        const response = await fetch('/api/reconciliation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sheetId: document.getElementById('reconciliation-sheet-id').value.trim(), tabName: document.getElementById('reconciliation-tab-name').value.trim(), startDate, endDate, propertyName: document.getElementById('reconciliation-property').value }) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Reconciliation failed.');
+        currentReconciliation = result;
+        setElText('reconciliation-total', result.summary.total_discrepancies || 0);
+        setElText('reconciliation-missing-system', result.summary.missing_in_system || 0);
+        setElText('reconciliation-missing-sheet', result.summary.missing_in_sheet || 0);
+        renderReconciliationTable();
+        renderReconciliationBrief(result);
+        const range = result.date_range ? ` (${result.date_range.from} to ${result.date_range.to})` : '';
+        status.textContent = `Completed${range}${result.duplicate_sheet_rows ? ` · ${result.duplicate_sheet_rows} duplicate sheet row(s) ignored` : ''}${result.skipped_sheet_rows ? ` · ${result.skipped_sheet_rows} row(s) missing a booking reference` : ''}${result.invalid_sheet_date_rows ? ` · ${result.invalid_sheet_date_rows} row(s) with an invalid date excluded` : ''}.`;
+      } catch (error) {
+        currentReconciliation = { missing_in_system: [], missing_in_sheet: [], summary: {} };
+        renderReconciliationTable();
+        setElText('reconciliation-brief-text', error.message);
+        status.textContent = error.message;
+      } finally {
+        button.disabled = false;
+        button.innerHTML = '<i class="fa-solid fa-play mr-1"></i>Run Reconciliation';
+      }
+    }
+
+    function exportReconciliation() {
+      const rows = [
+        ['Discrepancy Type', 'Booking Ref', 'Check-in Date', 'Guest Name', 'DB Status'],
+        ...(currentReconciliation.missing_in_system || []).map(row => ['Missing in System', row.booking_reference, row.check_in, row.guest_name || '', '']),
+        ...(currentReconciliation.missing_in_sheet || []).map(row => ['Missing in Sheet', row.booking_reference, row.check_in, row.guest_name || '', row.booking_status || ''])
+      ];
+      if (rows.length === 1) return alert('Run reconciliation before exporting.');
+      const csv = rows.map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
+      const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); link.download = `reconciliation-${new Date().toISOString().slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(link.href);
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
@@ -684,6 +974,7 @@
       if (aiTo && !aiTo.value) aiTo.value = lastDay;
       const taskDate = document.getElementById('task-date');
       if (taskDate && !taskDate.value) taskDate.value = todayStr;
+      applyReconciliationDatePreset();
     }
 
     function setTourParkDefault() {
@@ -693,10 +984,11 @@
       const tourParkOpt = options.find(o => o.value.toLowerCase().includes('tour park'));
       if (tourParkOpt) {
         const val = tourParkOpt.value;
-        ['ops-property', 'unpaid-filter-property', 'cal-property-select', 'kpi-property', 'ai-report-property', 'task-property'].forEach(id => {
+        ['unpaid-filter-property', 'cal-property-select', 'kpi-property', 'ai-report-property', 'task-property', 'reconciliation-property'].forEach(id => {
           const el = document.getElementById(id);
           if (el) el.value = val;
         });
+        opsProp.value = val;
       }
     }
 
@@ -705,7 +997,7 @@
         const res = await fetch('/api/properties');
         const data = await res.json();
         globalPropertiesList = data;
-        ['ops-property', 'unpaid-filter-property', 'cal-property-select', 'kpi-property', 'ai-report-property', 'task-property'].forEach(id => {
+        ['ops-property', 'unpaid-filter-property', 'cal-property-select', 'kpi-property', 'ai-report-property', 'task-property', 'reconciliation-property'].forEach(id => {
           const el = document.getElementById(id);
           if (el) {
             const currentVal = el.value;
@@ -717,7 +1009,7 @@
         });
       } catch (err) {
         console.error('Unable to load properties:', err);
-        ['ai-report-property', 'task-property'].forEach(id => {
+        ['ai-report-property', 'task-property', 'reconciliation-property'].forEach(id => {
           const el = document.getElementById(id);
           if (el) el.innerHTML = '<option value="ALL">Properties unavailable</option>';
         });
@@ -813,26 +1105,82 @@
     // =======================================================================
     // DYNAMIC MULTI-PANEL LOGIC (SIDE-BY-SIDE RELOCATION)
     // =======================================================================
-    function openUniversalModal(encodedData) {
-      const b = JSON.parse(decodeURIComponent(encodedData));
+    function closeUniversalPanel(ref) {
+      document.getElementById(`panel-${ref}`)?.remove();
+      if (activeTab === 'reconciliation') triggerFullSystemRefresh();
+    }
+
+    function closeUniversalPanels() {
+      const panels = document.getElementById('multi-panel-container');
+      if (!panels || !panels.children.length) return;
+      panels.innerHTML = '';
+      if (activeTab === 'reconciliation') triggerFullSystemRefresh();
+    }
+
+    async function openUniversalModal(encodedData) {
+      const seedBooking = JSON.parse(decodeURIComponent(encodedData));
+      let b = seedBooking;
+      try {
+        const response = await fetch(`/api/bookings/${encodeURIComponent(seedBooking.booking_reference)}`);
+        if (response.ok) b = { ...seedBooking, ...(await response.json()) };
+      } catch (error) {
+        console.warn('Unable to load authoritative booking details:', error.message);
+      }
       const ref = b.booking_reference;
       const bookingNotes = b.notes ?? b.booking_notes ?? b.custom_notes ?? '';
       const bookingStatus = String(b.booking_status || 'Confirmed').trim() || 'Confirmed';
       const isCanceled = ['canceled', 'cancelled'].includes(bookingStatus.toLowerCase());
+      const rawData = b.raw_data && typeof b.raw_data === 'object' ? b.raw_data : {};
+      const guestFirstName = b.guest_first_name || b.guest_first || (b.guest_name || '').split(' ')[0] || 'Guest';
+      const guestLastName = b.guest_last_name || b.guest_last || (b.guest_name || '').split(' ').slice(1).join(' ');
+      const guestPhone = b.guest_phone_1 || b.telephone || '';
+      const guestPhone2 = b.guest_phone_2 || rawData['Guest Phone 2'] || '';
+      const guestTag = b.tag || rawData.Tag || rawData.tag || '';
+      const ratePlan = b.rate_plan || rawData['Rate Plan'] || rawData.rate_plan || b.room_unit_type || '-';
+      const beds = b.beds || rawData.Beds || rawData.beds || '-';
+      const arrivalStatus = String(b.arrival || b.arrival_status || '').trim();
+      const checkInStatus = arrivalStatus || (['checked in', 'in house'].includes(bookingStatus.toLowerCase()) ? bookingStatus : 'Not Checked In');
       
       const container = document.getElementById('multi-panel-container');
       if(document.getElementById(`panel-${ref}`)) return; // Already open
 
       const panel = document.createElement('div');
       panel.id = `panel-${ref}`;
-      panel.className = 'edit-panel bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden pointer-events-auto flex flex-col no-print shrink-0 min-h-[60vh]';
+      panel.className = 'edit-panel bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded-xl shadow-2xl overflow-hidden pointer-events-auto flex flex-col no-print shrink-0 h-[92vh] max-h-[92vh] min-h-[60vh]';
       
       // Calculate Stats
       let chargesSum = parseFloat(b.total_charges || 0);
-      let paymentsSum = parseFloat(b.total_paid_amount || 0);
-      let baseRate = parseFloat(b.booked_amount || 0);
-      let totalBilled = baseRate + Math.abs(chargesSum);
+      const recordedPayments = parseFloat(b.total_paid_amount || 0);
+      const roomUnitRevenue = [b.room_unit_revenue, rawData['Room/Unit Revenue'], rawData['room_unit_revenue'], rawData.room_rate, rawData['Room Rate']]
+        .map(value => parseFloat(value))
+        .find(Number.isFinite);
+      const totalBilled = Number.isFinite(roomUnitRevenue) ? roomUnitRevenue : parseFloat(b.booked_amount || 0);
+      const otherRevenue = parseFloat(b.other_revenue ?? rawData['Other Revenue'] ?? rawData.other_revenue ?? 0) || 0;
+      const paymentsSum = Math.min(recordedPayments, totalBilled);
       let balance = totalBilled - paymentsSum;
+      const groupMembers = Array.isArray(b.group_members) ? b.group_members : [];
+      const groupHeaderHtml = groupMembers.length > 1 ? `
+        <div class="flex items-center gap-2">
+          <span class="inline-flex items-center gap-1 text-indigo-300 text-[10px] font-semibold whitespace-nowrap" title="${b.total_group_guests || 0} guests in group">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            ${b.total_group_guests || 0} Guests
+          </span>
+          <details class="relative text-left">
+            <summary class="list-none cursor-pointer rounded border border-slate-600 bg-slate-900 px-3 py-1.5 text-slate-300 hover:border-indigo-400">
+              <span class="flex flex-col text-left"><span class="text-xs text-slate-400">Ref: ${escapeHtml(ref)}</span><span class="text-sm font-semibold truncate max-w-[180px]">${escapeHtml(guestFirstName)} ${escapeHtml(guestLastName)}</span></span>
+            </summary>
+            <div class="absolute right-0 z-30 mt-1 w-72 rounded-lg border border-slate-600 bg-slate-900 p-1 shadow-xl">
+              ${groupMembers.map(member => {
+                const memberName = [member.guest_first_name, member.guest_last_name].filter(Boolean).join(' ') || member.guest_name || 'Guest';
+                return `<button type="button" onclick="openUniversalModal('${encodeBookingData(member)}')" class="block w-full rounded px-2 py-2 text-left hover:bg-slate-800"><span class="block text-[10px] font-bold text-white">${escapeHtml(member.booking_reference)} ${escapeHtml(memberName)}</span><span class="block text-[9px] text-slate-400">${Number(member.adults || 0)} Adult, ${escapeHtml(member.room_unit_name || '-')}</span></button>`;
+              }).join('')}
+            </div>
+          </details>
+        </div>` : `<div class="flex items-center"><button type="button" class="rounded border border-slate-600 bg-slate-900 px-3 py-1.5 text-left"><span class="flex flex-col"><span class="text-xs text-slate-400">Ref: ${escapeHtml(ref)}</span><span class="text-sm font-semibold truncate max-w-[180px]">${escapeHtml(guestFirstName)} ${escapeHtml(guestLastName)}</span></span></button></div>`;
+      const cancellationRevenue = totalBilled;
+      const waivedDeposit = Math.min(otherRevenue, Math.max(0, Math.abs(parseFloat(b.total_deposit_waivers || 0))));
+      const remainingDeposit = Math.max(0, otherRevenue - waivedDeposit);
+      const depositNotice = otherRevenue > 0 ? `<div class="flex items-start gap-2 rounded border border-rose-300 bg-rose-100 px-3 py-2 text-xs text-slate-900 shadow-sm"><i class="fa-solid fa-circle-info text-lg"></i><div><div>Damage deposit outstanding: <strong>${fmt(remainingDeposit)}</strong> <button type="button" class="text-cyan-700 underline" onclick="waivePanelDeposit('${ref}', ${remainingDeposit.toFixed(2)})" ${remainingDeposit <= 0 ? 'disabled' : ''}>${remainingDeposit > 0 ? 'Waive' : 'Waived'}</button></div>${waivedDeposit > 0 ? `<div class="mt-1">${fmt(waivedDeposit)} waived</div>` : ''}</div></div>` : '';
 
       let historyHtml = '';
       if(b.payment_history && b.payment_history.length > 0) {
@@ -842,79 +1190,76 @@
           historyHtml += `
             <tr class="hover:bg-slate-800/60 border-b border-slate-800/50 transition">
               <td class="p-2 font-mono text-[10px] text-slate-400">${p.payment_date ? p.payment_date.split('T')[0] : ''}</td>
-              <td class="p-2 font-bold ${isCharge ? 'text-amber-400' : 'text-emerald-400'}">${p.description || 'Record'}</td>
-              <td class="p-2 text-slate-400">${isCharge ? 'Charge' : p.payment_method}</td>
-              <td class="p-2 text-right font-bold ${isCharge ? 'text-amber-400' : 'text-emerald-400'}">${isCharge ? '+' : '-'}${fmt(Math.abs(amt))}</td>
-              <td class="p-2 text-center"><button onclick="removePaymentRecord('${ref}', ${p.payment_id})" class="px-2 py-0.5 bg-rose-900/40 hover:bg-rose-600 text-rose-300 hover:text-white rounded border border-rose-800/60 transition"><i class="fa-solid fa-trash-can"></i></button></td>
+              <td class="p-2 font-bold ${isCharge ? 'text-rose-300' : 'text-emerald-300'}">${p.payment_method || 'Payment'}</td>
+              <td class="p-2 text-slate-400 max-w-[180px]" title="${p.description || ''}">${p.description || 'Record'}</td>
+              <td class="p-2 text-right font-bold ${isCharge ? 'text-rose-300' : 'text-emerald-300'}">${amt < 0 ? '-' : '+'}${fmt(Math.abs(amt))}</td>
+              <td class="p-2 text-center">${p.source === 'manual' ? `<button onclick="removePaymentRecord('${ref}', ${p.payment_id})" class="text-slate-500 hover:text-rose-300 transition" title="Remove manual record"><i class="fa-solid fa-trash-can"></i></button>` : '<span class="text-[9px] text-slate-600">Imported</span>'}</td>
             </tr>`;
         });
       } else {
         historyHtml = `<tr><td colspan="5" class="p-4 text-center text-slate-500 italic">No historical records found.</td></tr>`;
       }
+      const chargeHistory = Array.isArray(b.charge_history) ? b.charge_history : [];
+      const cardHistory = Array.isArray(b.card_history) ? b.card_history : [];
+      const messageHistory = Array.isArray(b.message_history) ? b.message_history : [];
+      const chargesHtml = chargeHistory.length ? chargeHistory.map(c => `<tr class="border-b border-slate-800/60"><td class="p-2 text-slate-400">${c.charge_date ? c.charge_date.split('T')[0] : '-'}</td><td class="p-2 text-white">${c.category}</td><td class="p-2">${c.description}</td><td class="p-2 text-right text-rose-300">${fmt(c.amount)}</td><td class="p-2 text-center"><button onclick="removePanelCharge('${ref}', ${c.charge_id})" class="text-slate-500 hover:text-rose-300" title="Delete charge"><i class="fa-solid fa-trash-can"></i></button></td></tr>`).join('') : `<tr><td colspan="5" class="p-4 text-center text-slate-500 italic">No charges recorded.</td></tr>`;
+      const cardsHtml = cardHistory.length ? cardHistory.map(card => `<div class="flex items-center justify-between p-3 rounded-lg border border-slate-800 bg-slate-950/60"><div><div class="font-bold text-white">${card.card_brand || 'Payment card'} ending ${card.last_four || '----'}</div><div class="text-[10px] text-slate-400">${card.cardholder_name} · Expires ${card.expiry_month || '--'}/${card.expiry_year || '----'}</div></div><button onclick="removePanelCard('${ref}', ${card.card_id})" class="text-slate-500 hover:text-rose-300" title="Delete card"><i class="fa-solid fa-trash-can"></i></button></div>`).join('') : '<div class="text-center text-slate-500 py-6">No stored cards.</div>';
+      const commsHtml = messageHistory.length ? messageHistory.map(message => `<div class="p-3 border-b border-slate-800"><div class="flex justify-between text-[10px] text-slate-500"><span>${message.message_type}</span><span>${message.created_at ? message.created_at.split('T')[0] : ''}</span></div><div class="text-xs text-slate-200 mt-1">${message.message_text}</div><button onclick="removePanelMessage('${ref}', ${message.message_id})" class="text-[10px] text-rose-300 mt-2">Delete</button></div>`).join('') : '<div class="text-center text-slate-500 py-6">No communications recorded.</div>';
 
       panel.innerHTML = `
-        <div class="bg-slate-950/90 border-b border-slate-800 px-4 py-3 flex items-center justify-between shrink-0">
-          <div><h2 class="text-base font-bold text-white flex items-center gap-2"><i class="fa-solid fa-hotel text-indigo-400"></i> ${b.property_name || 'Hotel'}</h2>
-          <div class="text-[10px] text-slate-400 mt-0.5">Ref: <span class="font-mono font-bold text-emerald-400 bg-slate-800 px-1 rounded">${ref}</span> | ${b.guest_name}</div></div>
-          <button onclick="document.getElementById('panel-${ref}').remove()" class="text-slate-500 hover:text-white text-xl transition">&times;</button>
+        <div class="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-4 py-3 flex justify-between items-start w-full gap-4 shrink-0">
+          <div class="min-w-0 flex flex-col flex-1"><h2 class="text-sm font-bold text-white truncate max-w-[200px]">${b.room_unit_name || 'Room'}</h2><div class="text-[10px] text-slate-500 mt-1 flex items-center gap-1"><i class="fa-solid fa-hotel text-indigo-400"></i><span class="truncate">${b.property_name || 'Hotel'}</span></div></div>
+          <div class="flex flex-col items-end gap-2 shrink-0"><div class="max-w-[250px] truncate">${guestTag ? `<span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-[9px] font-bold max-w-[250px] truncate">${escapeHtml(guestTag)}<i class="fa-solid fa-xmark text-[8px] shrink-0"></i></span>` : ''}</div><div class="flex items-center gap-2">${groupHeaderHtml}<button onclick="closeUniversalPanel('${ref}')" class="text-slate-400 hover:text-white text-xl transition" aria-label="Close booking"><i class="fa-solid fa-xmark"></i></button></div></div>
         </div>
 
-        <div class="flex bg-slate-900 border-b border-slate-800 px-2 text-[11px] font-semibold overflow-x-auto shrink-0">
-          <button onclick="switchPanelTab('${ref}', 'guest')" id="tab-btn-guest-${ref}" class="px-4 py-2 border-b-2 border-indigo-500 text-indigo-400 whitespace-nowrap">Guest Details</button>
-          <button onclick="switchPanelTab('${ref}', 'finance')" id="tab-btn-finance-${ref}" class="px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">Financials</button>
-          <button onclick="switchPanelTab('${ref}', 'invoice')" id="tab-btn-invoice-${ref}" class="px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">Folio (Corp)</button>
+        <div class="flex bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700 px-2 text-[11px] font-semibold overflow-x-auto shrink-0">
+          <button onclick="switchPanelTab('${ref}', 'summary')" id="tab-btn-summary-${ref}" class="px-4 py-2 border-b-2 border-indigo-500 text-indigo-400 whitespace-nowrap">Summary</button>
+          <button onclick="switchPanelTab('${ref}', 'cards')" id="tab-btn-cards-${ref}" class="px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">Cards</button>
+          <button onclick="switchPanelTab('${ref}', 'guest')" id="tab-btn-guest-${ref}" class="px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">Guest</button>
+          <button onclick="switchPanelTab('${ref}', 'charges')" id="tab-btn-charges-${ref}" class="px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">Charges</button>
+          <button onclick="switchPanelTab('${ref}', 'payments')" id="tab-btn-payments-${ref}" class="px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">Payments</button>
+          <button onclick="switchPanelTab('${ref}', 'bill')" id="tab-btn-bill-${ref}" class="px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">Bill</button>
+          <button onclick="switchPanelTab('${ref}', 'comms')" id="tab-btn-comms-${ref}" class="px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap">Comms</button>
         </div>
 
-        <div id="ribbon-${ref}" class="grid grid-cols-4 gap-2 text-center text-[10px] p-3 bg-slate-950/50 border-b border-slate-800 shrink-0">
-          <div class="bg-slate-900 border border-slate-700/50 p-2 rounded-lg"><div class="text-[9px] uppercase font-bold text-slate-400">Total</div><div class="font-bold text-white mt-0.5">${fmt(totalBilled)}</div></div>
-          <div class="bg-slate-900 border border-slate-700/50 p-2 rounded-lg"><div class="text-[9px] uppercase font-bold text-emerald-400">Paid</div><div class="font-bold text-emerald-400 mt-0.5">${fmt(paymentsSum)}</div></div>
-          <div class="bg-slate-900 border border-slate-700/50 p-2 rounded-lg"><div class="text-[9px] uppercase font-bold text-amber-400">Balance</div><div class="font-bold text-amber-400 mt-0.5">${fmt(balance)}</div></div>
-          <div class="bg-slate-900 border border-rose-900/30 p-2 rounded-lg"><div class="text-[9px] uppercase font-bold text-rose-400">Due Now</div><div class="font-bold text-rose-400 mt-0.5">${fmt(Math.max(0, balance))}</div></div>
-        </div>
+        <div class="p-4 overflow-y-auto flex-1 text-sm text-slate-700 dark:text-slate-300 w-full relative min-h-0">
+          <!-- SUMMARY TAB -->
+          <div id="tab-summary-${ref}" class="space-y-4 h-full">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2"><div class="rounded-lg bg-slate-950 border border-slate-800 p-3"><div class="text-[9px] text-slate-500 uppercase">Total</div><div class="text-xl font-black text-white mt-1">${fmt(totalBilled)}</div></div><div class="rounded-lg bg-emerald-950/30 border border-emerald-500/20 p-3"><div class="text-[9px] text-emerald-400 uppercase">Paid</div><div class="text-xl font-black text-emerald-300 mt-1">${fmt(paymentsSum)}</div></div><div class="rounded-lg bg-amber-400/20 border border-amber-400/40 p-3"><div class="text-[9px] text-amber-300 uppercase">Balance</div><div class="text-xl font-black text-amber-200 mt-1">${fmt(Math.max(0, balance))}</div></div><div class="rounded-lg bg-rose-500/20 border border-rose-400/40 p-3"><div class="text-[9px] text-rose-300 uppercase">Due Now</div><div class="text-xl font-black text-rose-200 mt-1">${fmt(Math.max(0, balance))}</div></div></div>${depositNotice}
+            <div class="flex items-center justify-between gap-3 text-xs"><div class="flex items-center gap-3"><button class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-slate-700 dark:text-slate-300 shadow-sm"><i class="fa-regular fa-clock mr-1"></i>Not Known</button><span class="text-slate-700 dark:text-slate-300"><i class="fa-solid fa-phone mr-1 text-slate-500"></i>${guestPhone || '-'}</span></div><span class="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-slate-700 dark:text-slate-300">${checkInStatus}</span></div>
+            <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm"><div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs"><div class="space-y-2"><div><span class="text-[9px] uppercase text-slate-500 dark:text-slate-400">Check-in</span><div class="font-semibold text-slate-900 dark:text-white">${b.check_in || '-'}</div></div><div><span class="text-[9px] uppercase text-slate-500 dark:text-slate-400">Check Out</span><div class="font-semibold text-slate-900 dark:text-white">${b.check_out || '-'}</div></div><div><span class="text-[9px] uppercase text-slate-500 dark:text-slate-400">Nights</span><div class="font-semibold text-slate-900 dark:text-white">${b.nights || 0}</div></div><div><span class="text-[9px] uppercase text-slate-500 dark:text-slate-400">Source / Channel</span><div class="font-semibold text-cyan-600 dark:text-cyan-300">${b.channel || 'Direct'}</div></div></div><div class="flex flex-col items-center justify-center border-y md:border-y-0 md:border-x border-slate-200 dark:border-slate-700 py-3"><i class="fa-solid fa-people-group text-2xl text-indigo-500 dark:text-indigo-300"></i><span class="mt-2">${b.adults || 0} Adults</span><span>${b.children || 0} Children</span></div><div class="space-y-2"><div><span class="text-[9px] uppercase text-slate-500 dark:text-slate-400">Order</span><div class="font-mono text-cyan-600 dark:text-cyan-300 break-all">${b.order_reference || '-'}</div></div><div><span class="text-[9px] uppercase text-slate-500 dark:text-slate-400">Received</span><div class="text-slate-900 dark:text-white">${b.booking_date || '-'}</div></div><div><span class="text-[9px] uppercase text-slate-500 dark:text-slate-400">Cancellation</span><div class="text-slate-900 dark:text-white">${fmt(cancellationRevenue)}</div></div><div><span class="text-[9px] uppercase text-slate-500 dark:text-white">Deposit</span><div class="text-slate-900 dark:text-white">£-</div></div></div></div></div>
+            <div class="rounded-xl border border-slate-800 overflow-x-auto"><table class="w-full text-left text-[11px]"><thead class="bg-slate-950 text-[9px] uppercase text-slate-500"><tr><th class="p-2">Property</th><th class="p-2">Room/Unit Name</th><th class="p-2">Rate Plan</th><th class="p-2">Beds</th><th class="p-2 text-right">Room/Unit Revenue</th></tr></thead><tbody><tr class="border-t border-slate-800"><td class="p-2">${b.property_name || '-'}</td><td class="p-2">${b.room_unit_name || '-'}</td><td class="p-2">${ratePlan}</td><td class="p-2">${beds}</td><td class="p-2 text-right font-semibold">${fmt(totalBilled)}</td></tr></tbody></table></div>
+            <div class="rounded-xl border border-amber-300 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-950/20 p-4"><div class="flex items-center justify-between gap-2"><div class="flex gap-3 text-[10px] font-bold"><button class="border-b-2 border-amber-500 pb-1 text-amber-700 dark:text-amber-200">Booking Notes</button><button class="text-slate-500 dark:text-slate-400 pb-1">Cleaning Instructions</button></div><button onclick="savePanelGuestDetails('${ref}')" class="bg-yellow-400 text-slate-900 font-medium hover:bg-yellow-500 transition-colors rounded px-2 py-1 text-[10px]">Save</button></div><textarea id="notes-${ref}" data-panel-editable="${ref}" rows="4" class="mt-3 w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm text-xs" placeholder="Add booking notes..."></textarea></div>
+          </div>
 
-        <div class="p-4 overflow-y-auto flex-1 text-sm text-slate-300 w-full relative">
+          <!-- CARDS TAB -->
+          <div id="tab-cards-${ref}" class="hidden space-y-3 h-full"><div class="flex items-center justify-between"><div><div class="text-[10px] uppercase font-bold text-cyan-300">Payment cards</div><div class="text-xs text-slate-500 mt-1">Only masked card data is retained.</div></div></div><div class="space-y-2">${cardsHtml}</div><div class="rounded-lg border border-slate-800 bg-slate-950/50 p-3"><div class="text-[10px] font-bold text-slate-300 uppercase mb-2">Add card reference</div><div class="grid grid-cols-2 gap-2 text-[10px]"><input id="cardholder-${ref}" placeholder="Cardholder name" class="bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white"><input id="cardbrand-${ref}" placeholder="Brand" class="bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white"><input id="cardlast4-${ref}" maxlength="4" placeholder="Last 4" class="bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white"><div class="grid grid-cols-2 gap-1"><input id="cardmonth-${ref}" maxlength="2" placeholder="MM" class="bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white"><input id="cardyear-${ref}" maxlength="4" placeholder="YYYY" class="bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white"></div></div><button onclick="addPanelCard('${ref}')" class="mt-2 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded text-[10px] font-bold">Save Card Reference</button></div></div>
+
           <!-- GUEST TAB -->
-          <div id="tab-guest-${ref}" class="space-y-3 flex flex-col h-full">
-            <div class="grid grid-cols-2 gap-3 flex-1">
-              <div class="col-span-2 grid grid-cols-3 gap-2 rounded-lg border border-slate-800 bg-slate-950/50 p-2.5">
-                <div><div class="text-[9px] uppercase font-bold text-slate-500">Check-in</div><div class="text-xs font-semibold text-emerald-300 mt-1">${b.check_in || '-'}</div></div>
-                <div><div class="text-[9px] uppercase font-bold text-slate-500">Check-out</div><div class="text-xs font-semibold text-sky-300 mt-1">${b.check_out || '-'}</div></div>
-                <div><div class="text-[9px] uppercase font-bold text-slate-500">Stay</div><div class="text-xs font-semibold text-white mt-1">${b.nights || 0} night${Number(b.nights) === 1 ? '' : 's'}</div></div>
-              </div>
-              <div class="col-span-2"><label class="block text-[10px] font-bold text-emerald-400 uppercase mb-1.5"><i class="fa-solid fa-bed"></i> Room Assignment</label></div>
-              <div><label class="block text-[10px] text-slate-400 mb-1">Property</label><select id="prop-${ref}" onchange="populatePanelRooms('${ref}')" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs"></select></div>
-              <div><label class="block text-[10px] text-slate-400 mb-1">Assigned Unit</label><select id="room-${ref}" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs"></select></div>
-              
-              <div class="col-span-2 border-t border-slate-800 pt-2"><label class="block text-[10px] font-bold text-indigo-400 uppercase mb-1.5"><i class="fa-solid fa-address-card"></i> Guest Information</label></div>
-              <div><label class="block text-[10px] text-slate-400 mb-1">Guest Name</label><input type="text" id="name-${ref}" value="${b.guest_name||''}" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs"></div>
-              
-              <!-- Channel as Text Input requested by user -->
-              <div><label class="block text-[10px] text-slate-400 mb-1">Channel / Source</label>
-                <input type="text" id="chan-${ref}" value="${b.channel||'Direct'}" placeholder="e.g. Agoda, Direct" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-emerald-400 text-xs font-semibold">
-              </div>
-              
-              <div><label class="block text-[10px] text-slate-400 mb-1">Contact Phone</label><input type="text" id="phone-${ref}" value="${b.telephone||''}" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs"></div>
-              <div><label class="block text-[10px] text-slate-400 mb-1">Email Address</label><input type="email" id="email-${ref}" value="${b.email||''}" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs"></div>
-              <div><label class="block text-[10px] text-slate-400 mb-1">Booking Status</label><select id="status-${ref}" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs ${isCanceled ? 'text-rose-300' : 'text-emerald-300'}"><option value="${bookingStatus}" selected>${bookingStatus}</option>${bookingStatus !== 'Confirmed' ? '<option value="Confirmed">Confirmed</option>' : ''}${!isCanceled ? '<option value="Canceled">Canceled</option>' : ''}${isCanceled ? '<option value="Confirmed">Restore to Confirmed</option>' : ''}</select></div>
-              
-              <div class="col-span-2"><label class="block text-[10px] text-slate-400 mb-1">Remarks / Notes</label><textarea id="notes-${ref}" rows="4" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs" placeholder="Add custom notes here..."></textarea></div>
-            </div>
-            <div class="flex justify-between items-center pt-3 border-t border-slate-800 mt-2 shrink-0">
-              <div class="flex items-center gap-2"><button onclick="setBookingCancellation('${ref}', ${!isCanceled})" class="px-3 py-1.5 ${isCanceled ? 'bg-emerald-900/40 hover:bg-emerald-600 text-emerald-300' : 'bg-amber-900/40 hover:bg-amber-600 text-amber-300'} hover:text-white text-[10px] font-bold rounded-lg transition"><i class="fa-solid ${isCanceled ? 'fa-rotate-left' : 'fa-ban'} mr-1"></i> ${isCanceled ? 'Restore Booking' : 'Cancel Booking'}</button><button onclick="deleteBookingRecord('${ref}')" class="px-3 py-1.5 bg-rose-900/40 hover:bg-rose-600 text-rose-300 hover:text-white text-[10px] font-bold rounded-lg transition"><i class="fa-solid fa-trash-can mr-1"></i> Delete Permanently</button></div>
-              <button onclick="savePanelGuestDetails('${ref}')" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-lg transition"><i class="fa-solid fa-floppy-disk mr-1"></i> Save Changes</button>
-            </div>
+          <div id="tab-guest-${ref}" class="hidden space-y-3 flex flex-col h-full">
+            <div class="hidden" aria-hidden="true"><input id="name-${ref}" value="${guestFirstName} ${guestLastName}"><input id="chan-${ref}" value="${b.channel || 'Direct'}"><select id="prop-${ref}"><option value="${b.property_name || ''}" selected>${b.property_name || ''}</option></select><select id="room-${ref}"><option value="${b.room_unit_name || ''}" selected>${b.room_unit_name || ''}</option></select><input id="checkin-${ref}" value="${b.check_in || ''}"><input id="checkout-${ref}" value="${b.check_out || ''}"><input id="roomtype-${ref}" value="${b.room_unit_type || ''}"><input id="status-${ref}" value="${bookingStatus}"></div>
+            <div class="flex flex-wrap items-center gap-4 text-xs"><select class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm rounded-lg px-3 py-2"><option>Guest</option></select><label class="flex items-center gap-2 text-slate-700 dark:text-slate-300"><input type="checkbox" class="accent-amber-400"> Billing contact</label><label class="flex items-center gap-2 text-slate-700 dark:text-slate-300"><input type="checkbox" checked class="accent-amber-400"> Staying with us</label></div>
+            <input type="search" placeholder="Replace with existing contact" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white placeholder-slate-500 focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm rounded-lg px-3 py-2 text-xs">
+            <div class="flex gap-4 border-b border-slate-200 dark:border-slate-700 text-xs"><button class="border-b-2 border-amber-500 px-2 py-2 text-amber-700 dark:text-amber-300 font-semibold">Profile</button><button class="px-2 py-2 text-slate-500 dark:text-slate-400">Regulatory</button><button class="px-2 py-2 text-slate-500 dark:text-slate-400">Custom Fields</button></div>
+            <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 space-y-3 shadow-sm"><div class="text-[10px] font-semibold tracking-tight uppercase text-amber-700 dark:text-amber-300">Guest</div><div class="grid grid-cols-2 gap-3"><div><label class="field-label">Salutation</label><select class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm w-full rounded-lg px-2 py-1.5 text-xs"><option></option><option>Mr</option><option>Mrs</option><option>Ms</option></select></div><div><label class="field-label">Forename</label><input id="forename-${ref}" data-panel-editable="${ref}" disabled value="${guestFirstName}" class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm w-full rounded-lg px-2 py-1.5 text-xs"></div><div><label class="field-label">Surname</label><input id="surname-${ref}" data-panel-editable="${ref}" disabled value="${guestLastName}" class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm w-full rounded-lg px-2 py-1.5 text-xs"></div><div><label class="field-label">Type</label><select class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm w-full rounded-lg px-2 py-1.5 text-xs"><option>Adult</option><option>Child</option></select></div><div><label class="field-label">Email</label><input id="email-${ref}" data-panel-editable="${ref}" disabled type="email" value="${b.email || ''}" class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm w-full rounded-lg px-2 py-1.5 text-xs"></div><div><label class="field-label">Telephone</label><div class="flex gap-1"><span class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white w-12 rounded-lg px-2 py-1.5 text-xs text-center">🇬🇧</span><input id="phone-${ref}" data-panel-editable="${ref}" disabled value="${guestPhone}" class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm w-full rounded-lg px-2 py-1.5 text-xs"></div></div><div><label class="field-label">Other Phone</label><input value="${guestPhone2}" class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm w-full rounded-lg px-2 py-1.5 text-xs"></div><div><label class="field-label">Communicate in</label><select class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm w-full rounded-lg px-2 py-1.5 text-xs"><option>English</option></select></div><label class="flex items-center gap-2 self-end pb-2 text-xs text-slate-700 dark:text-slate-300"><input type="checkbox" class="accent-amber-400"> Allow marketing comms</label><div><label class="field-label">Group</label><input class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm w-full rounded-lg px-2 py-1.5 text-xs"></div><div><label class="field-label">Internal 1</label><input class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm w-full rounded-lg px-2 py-1.5 text-xs"></div><div><label class="field-label">Internal 2</label><input class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm w-full rounded-lg px-2 py-1.5 text-xs"></div></div></div>
+            <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 shadow-sm"><div class="text-[10px] font-semibold tracking-tight uppercase text-amber-700 dark:text-amber-300 mb-3">Company</div><div class="grid grid-cols-2 gap-3"><div><label class="field-label">Company Name</label><input id="comp-${ref}" data-panel-editable="${ref}" disabled value="${b.company_name || ''}" class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm w-full rounded-lg px-2 py-1.5 text-xs"></div><div><label class="field-label">Tax / VAT number</label><input id="vat-${ref}" data-panel-editable="${ref}" disabled value="${b.company_vat || ''}" class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm w-full rounded-lg px-2 py-1.5 text-xs"></div></div></div>
+            <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 shadow-sm"><div class="text-[10px] font-semibold tracking-tight uppercase text-amber-700 dark:text-amber-300 mb-3">Address</div><div class="grid grid-cols-2 gap-3"><div><label class="field-label">Address 1</label><input id="address-${ref}" data-panel-editable="${ref}" disabled value="${b.address_line || ''}" class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm w-full rounded-lg px-2 py-1.5 text-xs"></div><div><label class="field-label">Address 2</label><input class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm w-full rounded-lg px-2 py-1.5 text-xs"></div><div><label class="field-label">Address 3</label><input class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm w-full rounded-lg px-2 py-1.5 text-xs"></div><div><label class="field-label">Town/City</label><input id="city-${ref}" data-panel-editable="${ref}" disabled value="${b.city || ''}" class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm w-full rounded-lg px-2 py-1.5 text-xs"></div><div><label class="field-label">Postcode</label><input id="postcode-${ref}" data-panel-editable="${ref}" disabled value="${b.postcode || ''}" class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm w-full rounded-lg px-2 py-1.5 text-xs"></div><div><label class="field-label">Country</label><input class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm w-full rounded-lg px-2 py-1.5 text-xs"></div><div><label class="field-label">State/Province</label><input class="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-400 focus:outline-none shadow-sm w-full rounded-lg px-2 py-1.5 text-xs"></div></div></div>
           </div>
 
           <!-- FINANCE TAB -->
-          <div id="tab-finance-${ref}" class="hidden space-y-3 flex flex-col h-full">
-            <div class="bg-slate-950/50 border border-slate-800 rounded-lg overflow-hidden w-full flex-1 flex flex-col min-h-[150px]">
-              <div class="px-3 py-1.5 bg-slate-900 border-b border-slate-800 font-bold text-[10px] text-slate-200 uppercase tracking-wide"><i class="fa-solid fa-list-ul mr-1 text-indigo-400"></i> Ledger</div>
-              <div class="overflow-x-auto flex-1 h-full"><table class="w-full text-left text-[11px]"><thead class="bg-slate-950 text-slate-500 text-[9px] uppercase sticky top-0 z-10"><tr><th class="p-2">Date</th><th class="p-2">Desc</th><th class="p-2">Method</th><th class="p-2 text-right">Amt</th><th class="p-2 text-center">Del</th></tr></thead><tbody class="divide-y divide-slate-800 text-slate-300">${historyHtml}</tbody></table></div>
+          <!-- CHARGES TAB -->
+          <div id="tab-charges-${ref}" class="hidden space-y-3 h-full min-h-0"><div class="flex items-center justify-between"><div><div class="text-[10px] uppercase font-bold text-amber-300">Charges and deductions</div><div class="text-xs text-slate-500 mt-1">Add revenue items such as damage deposits or breakfast.</div></div></div><div class="border border-slate-800 rounded-lg overflow-hidden flex-1 min-h-[180px]"><table class="w-full text-left text-[11px]"><thead class="bg-slate-950 text-slate-500 text-[9px] uppercase"><tr><th class="p-2">Date</th><th class="p-2">Category</th><th class="p-2">Description</th><th class="p-2 text-right">Amount</th><th class="p-2"></th></tr></thead><tbody class="divide-y divide-slate-800">${chargesHtml}</tbody></table></div><div class="border border-slate-700 bg-slate-900 rounded-lg p-3"><div class="grid grid-cols-3 gap-2 text-[10px]"><input id="charge-category-${ref}" value="Ad Hoc" placeholder="Category" class="bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white"><input id="charge-description-${ref}" placeholder="Description" class="bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white"><input id="charge-amount-${ref}" type="number" min="0.01" step="0.01" placeholder="Amount" class="bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white"></div><button onclick="addPanelCharge('${ref}')" class="mt-2 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded text-[10px] font-bold">Add Charge</button></div></div>
+
+          <!-- PAYMENTS TAB -->
+          <div id="tab-payments-${ref}" class="hidden space-y-3 flex flex-col h-full min-h-0">
+            <div class="bg-slate-950/50 border border-slate-800 rounded-lg overflow-hidden w-full flex-1 flex flex-col min-h-[220px]">
+              <div class="px-3 py-2 bg-slate-900 border-b border-slate-800 flex items-center justify-between"><span class="font-bold text-[10px] text-slate-200 uppercase tracking-wide"><i class="fa-solid fa-list-check mr-1 text-indigo-400"></i> Complete payment ledger</span><span class="text-[9px] text-slate-500">Imported records are read-only</span></div>
+              <div class="overflow-y-auto overflow-x-auto flex-1 h-full"><table class="w-full text-left text-[11px] min-w-[560px]"><thead class="bg-slate-950 text-slate-500 text-[9px] uppercase sticky top-0 z-10"><tr><th class="p-2">Date</th><th class="p-2">Payment method</th><th class="p-2">Description / source note</th><th class="p-2 text-right">Amount</th><th class="p-2 text-center">Audit</th></tr></thead><tbody class="divide-y divide-slate-800 text-slate-300">${historyHtml}</tbody></table></div>
             </div>
             <div class="border border-slate-700 bg-slate-900 rounded-lg p-3 w-full shrink-0">
               <div class="font-bold text-[10px] text-emerald-400 mb-2 uppercase"><i class="fa-solid fa-plus-circle mr-1"></i> New Record</div>
               <div class="grid grid-cols-2 gap-2 text-[10px]">
-                <div><label class="block text-slate-400 mb-0.5">Type</label><select id="ftype-${ref}" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white"><option value="payment">Payment</option><option value="charge">Charge</option></select></div>
+                <div><label class="block text-slate-400 mb-0.5">Type</label><select id="ftype-${ref}" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white"><option value="payment">Payment</option><option value="refund">Refund</option></select></div>
                 <div><label class="block text-slate-400 mb-0.5">Amount</label><input type="number" step="0.01" id="famt-${ref}" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-emerald-400 font-bold"></div>
                 <div><label class="block text-slate-400 mb-0.5">Method</label><select id="fmeth-${ref}" onchange="toggleCardField('${ref}')" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white"><option value="Cash">Cash</option><option value="External Card Reader">Ext Card Reader</option><option value="Manual Extra Net VCC">Manual VCC</option><option value="Bank Transfer">Bank Transfer</option><option value="Voucher">Voucher</option><option value="On Account">On Account</option></select></div>
                 <div><label class="block text-slate-400 mb-0.5">Description</label><input type="text" id="fdesc-${ref}" placeholder="e.g. Deposit" class="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white"></div>
@@ -923,36 +1268,43 @@
                 <div><label class="block text-slate-400 mb-0.5">Brand</label><input type="text" id="fbrand-${ref}" class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-white"></div>
                 <div><label class="block text-slate-400 mb-0.5">Last 4</label><input type="text" maxlength="4" id="flast4-${ref}" class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-white font-mono"></div>
               </div>
-              <div class="mt-2 text-right"><button onclick="addPanelPayment('${ref}')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded shadow-lg text-[10px]">Save Record</button></div>
+              <div class="mt-2 flex items-center justify-between gap-2"><button onclick="waivePanelBalance('${ref}', ${Math.max(0, balance).toFixed(2)})" class="px-3 py-1 bg-amber-900/50 hover:bg-amber-600 text-amber-200 hover:text-white font-bold rounded border border-amber-700/50 text-[10px]" ${balance <= 0 ? 'disabled' : ''}><i class="fa-solid fa-scale-balanced mr-1"></i>Waive Balance</button><button onclick="addPanelPayment('${ref}')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded shadow-lg text-[10px]">Save Record</button></div>
             </div>
           </div>
 
           <!-- INVOICE TAB -->
-          <div id="tab-invoice-${ref}" class="hidden space-y-3 flex flex-col h-full">
+          <!-- BILL TAB -->
+          <div id="tab-bill-${ref}" class="hidden space-y-3 flex flex-col h-full min-h-0 overflow-y-auto">
             <div class="bg-slate-950/50 p-3 rounded-lg border border-slate-800 shrink-0">
               <label class="block text-[10px] font-bold text-indigo-400 uppercase mb-2"><i class="fa-solid fa-building"></i> Corporate Info</label>
               <div class="grid grid-cols-2 gap-2">
-                <div><label class="block text-[10px] text-slate-400 mb-1">Company Name</label><input type="text" id="comp-${ref}" value="${b.company_name||''}" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white text-[10px]"></div>
-                <div><label class="block text-[10px] text-slate-400 mb-1">VAT Number</label><input type="text" id="vat-${ref}" value="${b.company_vat||''}" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white text-[10px] font-mono"></div>
+                <div><label class="block text-[10px] text-slate-400 mb-1">Company Name</label><input type="text" id="comp-${ref}" data-panel-editable="${ref}" disabled value="${b.company_name||''}" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white text-[10px] disabled:opacity-60"></div>
+                <div><label class="block text-[10px] text-slate-400 mb-1">VAT Number</label><input type="text" id="vat-${ref}" data-panel-editable="${ref}" disabled value="${b.company_vat||''}" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white text-[10px] font-mono disabled:opacity-60"></div>
               </div>
               <div class="text-right mt-2"><button onclick="savePanelGuestDetails('${ref}')" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[9px] font-bold rounded transition">Update Corporate</button></div>
             </div>
             
-            <div class="bg-white text-slate-900 p-4 rounded-lg shadow-inner flex-1 overflow-y-auto">
+            <div class="bg-white text-slate-900 p-6 rounded-lg shadow-inner max-w-[760px] w-full mx-auto min-h-[760px] flex flex-col">
               <div class="flex justify-between border-b-2 border-slate-200 pb-3 mb-3">
                 <div><h1 class="text-lg font-black text-slate-800">Eviivo Hotel</h1><p class="text-[10px] text-slate-500">Folio Statement</p></div>
                 <div class="text-right"><div class="text-xs font-mono font-bold text-slate-800">INV-${ref}</div><div class="text-[9px] text-slate-500">${new Date().toISOString().split('T')[0]}</div></div>
               </div>
-              <div class="text-[10px] mb-3 leading-relaxed"><b>Billed To:</b> ${b.guest_name} ${b.company_name ? '<br>'+b.company_name : ''} ${b.company_vat ? '<br>VAT: '+b.company_vat : ''}</div>
+              <div class="text-[10px] mb-3 leading-relaxed"><b>Billed To:</b> ${b.guest_name} ${b.company_name ? '<br>'+b.company_name : ''} ${b.company_vat ? '<br>VAT: '+b.company_vat : ''}<br><span class="text-slate-500">Company Address: [To be provided]</span><br><span class="text-slate-500">VAT Number: ${b.company_vat || '[To be provided]'}</span></div>
               <table class="w-full text-[10px] text-left mb-4 border-collapse"><thead class="border-b border-slate-300 text-slate-500"><tr><th class="pb-1">Desc</th><th class="pb-1 text-right">Amount (£)</th></tr></thead>
-              <tbody><tr><td class="py-1 font-bold">Room Rate</td><td class="py-1 text-right font-bold">${fmt(baseRate)}</td></tr></tbody></table>
-              <div class="flex justify-end text-[11px]"><div class="w-40"><div class="flex justify-between mb-1"><span>Billed:</span><b>${fmt(totalBilled)}</b></div><div class="flex justify-between text-emerald-600 mb-1 border-b pb-1"><span>Paid:</span><b>${fmt(paymentsSum)}</b></div><div class="flex justify-between font-black text-slate-900"><span>Due:</span><span>${fmt(balance)}</span></div></div></div>
+              <tbody><tr><td class="py-1 font-bold">Room Rate</td><td class="py-1 text-right font-bold">${fmt(totalBilled)}</td></tr></tbody></table>
+              <div class="mt-auto border-t-2 border-slate-200 pt-3 flex justify-end text-[11px]"><div class="w-52"><div class="flex justify-between mb-1"><span>Total Billed:</span><b>${fmt(totalBilled)}</b></div><div class="flex justify-between text-emerald-600 mb-1 border-b pb-1"><span>Total Paid:</span><b>${fmt(paymentsSum)}</b></div><div class="flex justify-between font-black text-slate-900 text-sm"><span>Balance Due:</span><span>${fmt(balance)}</span></div></div></div>
+              <div class="border-t border-slate-200 mt-8 pt-3 text-[9px] text-slate-400 flex justify-between"><span>Company Address: [To be provided]</span><span>VAT Number: ${b.company_vat || '[To be provided]'}</span></div>
             </div>
           </div>
+
+          <!-- COMMS TAB -->
+          <div id="tab-comms-${ref}" class="hidden space-y-3 h-full overflow-y-auto"><div class="text-[10px] uppercase font-bold text-cyan-300">Communications & internal notes</div><div class="rounded-lg border border-slate-800 bg-slate-950/40">${commsHtml}</div><div class="rounded-lg border border-slate-800 bg-slate-950/50 p-3"><div class="grid grid-cols-3 gap-2 text-[10px]"><select id="message-type-${ref}" class="bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white"><option>Internal Note</option><option>Guest Message</option><option>Operational Handover</option></select><textarea id="message-text-${ref}" rows="3" placeholder="Record a communication or handover note" class="col-span-2 bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-white"></textarea></div><button onclick="addPanelMessage('${ref}')" class="mt-2 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded text-[10px] font-bold">Save Communication</button></div></div>
         </div>
+        <div id="footer-${ref}" class="border-t border-slate-800 bg-slate-950/90 px-4 py-3 flex items-center justify-between gap-3 shrink-0"></div>
       `;
       container.prepend(panel); // Prepend so newest opens on the left of existing
       document.getElementById(`notes-${ref}`).value = bookingNotes;
+      renderPanelFooter(ref, 'summary');
 
       // Populate Properties
       const propSel = document.getElementById(`prop-${ref}`);
@@ -966,14 +1318,36 @@
     }
 
     function switchPanelTab(ref, tab) {
-      ['guest', 'finance', 'invoice'].forEach(t => {
+      ['summary', 'cards', 'guest', 'charges', 'payments', 'bill', 'comms'].forEach(t => {
         document.getElementById(`tab-${t}-${ref}`).classList.add('hidden');
         document.getElementById(`tab-btn-${t}-${ref}`).className = "px-4 py-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 whitespace-nowrap";
       });
       document.getElementById(`tab-${tab}-${ref}`).classList.remove('hidden');
       document.getElementById(`tab-btn-${tab}-${ref}`).className = "px-4 py-2 border-b-2 border-indigo-500 text-indigo-400 font-bold whitespace-nowrap";
-      const ribbon = document.getElementById(`ribbon-${ref}`);
-      if(tab === 'invoice') ribbon.classList.add('hidden'); else ribbon.classList.remove('hidden');
+      renderPanelFooter(ref, tab);
+    }
+
+    function renderPanelFooter(ref, tab) {
+      const footer = document.getElementById(`footer-${ref}`);
+      if (!footer) return;
+      const yellow = 'px-3 py-1.5 rounded-md bg-amber-400 hover:bg-amber-300 text-slate-950 text-[10px] font-bold transition';
+      if (tab === 'summary') {
+        footer.innerHTML = `<button onclick="openNewBookingModal('ops')" class="${yellow}"><i class="fa-solid fa-plus mr-1"></i>Add Booking</button><div class="flex flex-wrap justify-end gap-2"><button class="${yellow}">Park</button><button onclick="togglePanelEdit('${ref}')" class="${yellow}">Modify</button><button onclick="setBookingCancellation('${ref}', true)" class="${yellow}">Cancel</button><button onclick="alert('Check-in action queued for ${ref}.')" class="${yellow}">Check In <i class="fa-solid fa-chevron-down ml-1"></i></button></div>`;
+      } else if (tab === 'guest') {
+        footer.innerHTML = `<div class="flex items-center gap-3"><button onclick="togglePanelEdit('${ref}')" class="${yellow}"><i class="fa-solid fa-plus mr-1"></i>Add guest</button><button onclick="document.querySelectorAll('#tab-guest-${ref} input, #tab-guest-${ref} select').forEach(field => { if (!field.closest('.hidden')) field.value = ''; })" class="text-[10px] text-slate-400 hover:text-white">Reset</button><label class="flex items-center gap-1 text-[10px] text-slate-300"><input type="checkbox" class="accent-amber-400"> Clean profile</label></div><div class="flex gap-2"><button onclick="alert('Guest registration is ready for ${ref}.')" class="px-3 py-1.5 rounded-md border border-amber-400 text-amber-300 text-[10px] font-bold">Guest registration</button><button onclick="savePanelGuestDetails('${ref}')" class="${yellow}">Save</button></div>`;
+      } else {
+        footer.innerHTML = '';
+      }
+    }
+
+    function togglePanelEdit(ref) {
+      const fields = document.querySelectorAll(`[data-panel-editable="${ref}"]`);
+      const editable = Array.from(fields).some(field => field.disabled);
+      fields.forEach(field => { field.disabled = !editable; field.classList.toggle('ring-1', editable); field.classList.toggle('ring-indigo-500', editable); });
+      const modify = document.getElementById(`modify-${ref}`);
+      const save = document.getElementById(`save-${ref}`);
+      if (modify) modify.innerHTML = editable ? '<i class="fa-solid fa-lock mr-1"></i> Read-only' : '<i class="fa-solid fa-pen mr-1"></i> Modify';
+      if (save) save.disabled = !editable;
     }
 
     async function populatePanelRooms(ref, selectedRoom = '') {
@@ -995,9 +1369,18 @@
       if(meth === 'External Card Reader') sec.classList.remove('hidden'); else sec.classList.add('hidden');
     }
 
+    async function completeModalMutation(ref, response, fallbackMessage = 'Unable to complete booking action.') {
+      let result = {};
+      try { result = await response.json(); } catch (error) { result = {}; }
+      if (!response.ok) throw new Error(result.error || fallbackMessage);
+      document.getElementById(`panel-${ref}`)?.remove();
+      await triggerFullSystemRefresh();
+      return result;
+    }
+
     async function savePanelGuestDetails(ref) {
       try {
-        await fetch(`/api/reservations/${ref}/update`, {
+        const response = await fetch(`/api/reservations/${encodeURIComponent(ref)}/update`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             guest_name: document.getElementById(`name-${ref}`).value,
@@ -1009,11 +1392,16 @@
             booking_status: document.getElementById(`status-${ref}`).value,
             property_name: document.getElementById(`prop-${ref}`).value,
             room_unit_name: document.getElementById(`room-${ref}`).value,
+            room_unit_type: document.getElementById(`roomtype-${ref}`).value,
+            check_in: document.getElementById(`checkin-${ref}`).value,
+            check_out: document.getElementById(`checkout-${ref}`).value,
+            address_line: document.getElementById(`address-${ref}`).value,
+            city: document.getElementById(`city-${ref}`).value,
+            postcode: document.getElementById(`postcode-${ref}`).value,
             notes: document.getElementById(`notes-${ref}`).value
           })
         });
-        document.getElementById(`panel-${ref}`).remove();
-        triggerFullSystemRefresh();
+        await completeModalMutation(ref, response, 'Unable to save booking details.');
       } catch(e) { alert('Error: ' + e.message); }
     }
 
@@ -1026,8 +1414,7 @@
           body: JSON.stringify({ booking_status: shouldCancel ? 'Canceled' : 'Confirmed' })
         });
         if (!response.ok) throw new Error((await response.json()).error || `Unable to ${action} booking.`);
-        document.getElementById(`panel-${ref}`).remove();
-        triggerFullSystemRefresh();
+        await completeModalMutation(ref, response, `Unable to ${action} booking.`);
       } catch(e) { alert('Error: ' + e.message); }
     }
 
@@ -1039,32 +1426,123 @@
       let brand = '', last4 = '';
       if(method === 'External Card Reader') { brand = document.getElementById(`fbrand-${ref}`).value; last4 = document.getElementById(`flast4-${ref}`).value; }
       if (isNaN(amt) || amt <= 0) return alert('Invalid amount.');
-      if (type === 'charge') amt = -Math.abs(amt); 
+      if (type === 'refund') amt = -Math.abs(amt);
       try {
-        await fetch(`/api/reservations/${ref}/payments`, {
+        const response = await fetch(`/api/reservations/${encodeURIComponent(ref)}/payments`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ amount: amt, description: desc, payment_method: method, card_brand: brand, card_last_four: last4 })
         });
-        document.getElementById(`panel-${ref}`).remove();
-        triggerFullSystemRefresh();
+        await completeModalMutation(ref, response, 'Unable to save payment record.');
       } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    async function addPanelCharge(ref) {
+      const amount = Number(document.getElementById(`charge-amount-${ref}`).value);
+      const description = document.getElementById(`charge-description-${ref}`).value.trim();
+      const category = document.getElementById(`charge-category-${ref}`).value.trim() || 'Ad Hoc';
+      if (!amount || amount <= 0 || !description) return alert('Enter a positive amount and charge description.');
+      try {
+        const response = await fetch(`/api/reservations/${encodeURIComponent(ref)}/charges`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount, description, category }) });
+        await completeModalMutation(ref, response, 'Unable to add charge.');
+      } catch (error) { alert(`Error: ${error.message}`); }
+    }
+
+    async function removePanelCharge(ref, chargeId) {
+      if (!confirm('Delete this charge and recalculate the booking total?')) return;
+      try {
+        const response = await fetch(`/api/reservations/${encodeURIComponent(ref)}/charges/${encodeURIComponent(chargeId)}`, { method: 'DELETE' });
+        await completeModalMutation(ref, response, 'Unable to delete charge.');
+      } catch (error) { alert(`Error: ${error.message}`); }
+    }
+
+    async function addPanelCard(ref) {
+      const payload = {
+        cardholder_name: document.getElementById(`cardholder-${ref}`).value.trim(),
+        card_brand: document.getElementById(`cardbrand-${ref}`).value.trim(),
+        last_four: document.getElementById(`cardlast4-${ref}`).value.trim(),
+        expiry_month: document.getElementById(`cardmonth-${ref}`).value.trim(),
+        expiry_year: document.getElementById(`cardyear-${ref}`).value.trim()
+      };
+      if (!payload.cardholder_name) return alert('Cardholder name is required.');
+      try {
+        const response = await fetch(`/api/reservations/${encodeURIComponent(ref)}/cards`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        await completeModalMutation(ref, response, 'Unable to save card reference.');
+      } catch (error) { alert(`Error: ${error.message}`); }
+    }
+
+    async function removePanelCard(ref, cardId) {
+      if (!confirm('Remove this stored card reference?')) return;
+      try {
+        const response = await fetch(`/api/reservations/${encodeURIComponent(ref)}/cards/${encodeURIComponent(cardId)}`, { method: 'DELETE' });
+        await completeModalMutation(ref, response, 'Unable to remove card reference.');
+      } catch (error) { alert(`Error: ${error.message}`); }
+    }
+
+    async function addPanelMessage(ref) {
+      const message_text = document.getElementById(`message-text-${ref}`).value.trim();
+      const message_type = document.getElementById(`message-type-${ref}`).value;
+      if (!message_text) return alert('Enter a communication note.');
+      try {
+        const response = await fetch(`/api/reservations/${encodeURIComponent(ref)}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message_text, message_type }) });
+        await completeModalMutation(ref, response, 'Unable to save communication.');
+      } catch (error) { alert(`Error: ${error.message}`); }
+    }
+
+    async function removePanelMessage(ref, messageId) {
+      if (!confirm('Delete this communication note?')) return;
+      try {
+        const response = await fetch(`/api/reservations/${encodeURIComponent(ref)}/messages/${encodeURIComponent(messageId)}`, { method: 'DELETE' });
+        await completeModalMutation(ref, response, 'Unable to delete communication.');
+      } catch (error) { alert(`Error: ${error.message}`); }
+    }
+
+    async function waivePanelBalance(ref, amount) {
+      const value = Number(amount || 0);
+      if (!value || value <= 0) return alert('There is no positive balance to waive.');
+      const description = prompt(`Confirm waiver of ${fmt(value)}. Enter an audit note:`, 'Balance waived by Finance');
+      if (description === null) return;
+      if (!description.trim()) return alert('An audit note is required for every waiver.');
+      try {
+        const response = await fetch(`/api/reservations/${encodeURIComponent(ref)}/waive`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ description })
+        });
+        await completeModalMutation(ref, response, 'Unable to waive balance.');
+      } catch(e) { alert('Error: ' + e.message); }
+    }
+
+    async function waivePanelDeposit(ref, remainingAmount) {
+      const value = Number(remainingAmount || 0);
+      if (!value || value <= 0) return;
+      const rawAmount = prompt(`Enter deposit amount to waive (maximum ${fmt(value)}):`, value.toFixed(2));
+      if (rawAmount === null) return;
+      const waiverAmount = Number(rawAmount);
+      if (!Number.isFinite(waiverAmount) || waiverAmount <= 0 || waiverAmount > value) return alert(`Enter an amount between £0.01 and ${fmt(value)}.`);
+      const description = prompt(`Confirm waiver of ${fmt(waiverAmount)}. Enter an audit note:`, 'Damage deposit waived by Finance');
+      if (description === null) return;
+      if (!description.trim()) return alert('An audit note is required for every waiver.');
+      try {
+        const response = await fetch(`/api/reservations/${encodeURIComponent(ref)}/deposit-waive`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount: waiverAmount, description })
+        });
+        await completeModalMutation(ref, response, 'Unable to waive deposit.');
+      } catch (error) { alert(`Error: ${error.message}`); }
     }
 
     async function removePaymentRecord(ref, paymentId) {
       if(!confirm('Waive/Delete this record?')) return;
       try {
-        await fetch(`/api/payments/${paymentId}`, { method: 'DELETE' });
-        document.getElementById(`panel-${ref}`).remove();
-        triggerFullSystemRefresh();
+        const response = await fetch(`/api/payments/${encodeURIComponent(paymentId)}`, { method: 'DELETE' });
+        await completeModalMutation(ref, response, 'Unable to remove payment record.');
       } catch(e) { alert('Error: ' + e.message); }
     }
 
     async function deleteBookingRecord(ref) {
       if(!confirm(`⚠️ PERMANENT: Delete ${ref}?`)) return;
       try {
-        await fetch(`/api/reservations/${encodeURIComponent(ref)}`, { method: 'DELETE' });
-        document.getElementById(`panel-${ref}`).remove();
-        triggerFullSystemRefresh();
+        const response = await fetch(`/api/reservations/${encodeURIComponent(ref)}`, { method: 'DELETE' });
+        await completeModalMutation(ref, response, 'Unable to delete booking.');
       } catch(e) { alert('Error: ' + e.message); }
     }
 
@@ -1095,7 +1573,7 @@
             <tr class="table-row-hover transition" onclick="openUniversalModal('${enc}')">
               <td class="p-2 font-mono font-bold text-emerald-400"><div class="text-[11px]">${r.booking_reference}</div><div class="text-[9px] text-slate-500 font-sans">${r.room_unit_name}</div></td>
               <td class="p-2 font-bold text-white"><div class="text-[11px]">${r.guest_name}</div></td>
-              <td class="p-2 text-[10px] text-amber-300 max-w-[150px] truncate">${r.notes || ''}</td>
+              <td class="p-2 text-[10px] text-amber-300 max-w-[150px] truncate">${depositBadge(r)}${r.notes || ''}</td>
               <td class="p-2 text-slate-300">${r.property_name}</td>
               <td class="p-2 text-[9px] text-slate-400 whitespace-nowrap">${r.check_in?.split('T')[0]}</td>
               <td class="p-2 text-right font-medium">${fmt(r.booked_amount)}</td>
@@ -1121,12 +1599,18 @@
       fetchDailyOps();
     }
 
+    function getSelectedOpsProperties() {
+      return Array.from(document.getElementById('ops-property')?.selectedOptions || []).map(option => option.value).filter(Boolean);
+    }
+
     async function fetchDailyOps() {
-      const prop = document.getElementById('ops-property')?.value || 'ALL';
+      const propertySelect = document.getElementById('ops-property');
+      const selectedProperties = getSelectedOpsProperties();
+      const prop = selectedProperties.length ? selectedProperties.join(',') : 'ALL';
       const date = document.getElementById('ops-date')?.value || '';
       if(!date) return;
 
-      const displayHotel = prop === 'ALL' ? 'All Properties' : prop;
+      const displayHotel = selectedProperties.includes('ALL') || !selectedProperties.length ? 'All Properties' : selectedProperties.join(' + ');
       setElText('preview-hotel-title', displayHotel);
       setElText('preview-date-text', date);
       setElText('arrivals-hotel-subtitle', displayHotel);
@@ -1166,6 +1650,7 @@
         }
 
         renderOpsTable('ops-arrivals-tbody', arr);
+        initializeSmartFilters('#expected-arrivals-table');
         renderOpsTable('ops-departures-tbody', dep);
       } catch (e) {}
     }
@@ -1189,7 +1674,7 @@
           return `<button onclick="openUniversalModal('${encoded}')" class="w-full text-left p-2 rounded-lg bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-amber-500/50 transition group">
             <span class="flex items-center justify-between gap-2"><span class="text-[10px] font-bold text-emerald-300 truncate">${escapeHtml(reservation.property_name || 'Unknown property')}</span><span class="text-[9px] text-slate-500">Check-in</span></span>
             <span class="flex items-center justify-between gap-2 mt-1"><span class="font-mono text-[9px] text-slate-300">${escapeHtml(reservation.booking_reference)}</span><span class="text-[9px] ${balance > 0 ? 'text-amber-300' : 'text-emerald-300'}">${balance > 0 ? `Due ${fmt(balance)}` : 'Cleared'}</span></span>
-            <span class="block text-[9px] text-slate-500 mt-1">Room ${escapeHtml(reservation.room_unit_name || '-')} · ${escapeHtml(reservation.check_in || '-')} to ${escapeHtml(reservation.check_out || '-')}</span>
+            <span class="block text-[9px] text-slate-500 mt-1">Room ${escapeHtml(reservation.room_unit_name || '-')} · ${escapeHtml(reservation.check_in || '-')} to ${escapeHtml(reservation.check_out || '-')}</span>${depositBadge(reservation)}
           </button>`;
         }).join('');
         return `<article class="border border-amber-500/20 rounded-lg p-2.5 bg-amber-950/10">
@@ -1225,11 +1710,11 @@
         const groupTotal = r.order_reference ? groupTotals[r.order_reference] : 0;
         const groupIndex = r.order_reference ? (groupIndexes[r.order_reference] = (groupIndexes[r.order_reference] || 0) + 1) : 0;
         const groupLabel = groupTotal > 1 ? `<span class="ops-note-pill bg-purple-950/70 border border-purple-700/70 text-purple-200">Group: ${r.guest_name} (${groupIndex}/${groupTotal})</span>` : '';
-        const noteLabel = r.notes ? `<span class="ops-note-pill bg-amber-950/70 border border-amber-700/70 text-amber-200" title="${r.notes}">${r.notes}</span>` : (!groupLabel ? '<span class="text-slate-600">&mdash;</span>' : '');
+        const noteLabel = `${depositBadge(r)}${r.notes ? `<span class="ops-note-pill bg-amber-950/70 border border-amber-700/70 text-amber-200" title="${r.notes}">${r.notes}</span>` : (!groupLabel ? '<span class="text-slate-600">&mdash;</span>' : '')}`;
         const contact = r.telephone || r.email || 'No Contact';
         const contactTooltip = [r.telephone, r.email].filter(Boolean).join(' · ') || 'No Contact';
         const dates = `${r.check_in || '-'} <span class="text-slate-600">&rarr;</span> ${r.check_out || '-'} <span class="text-slate-500">(${r.nights || 0}n)</span>`;
-        const status = bal > 0 ? (paid > 0 ? `Deposit ${fmt(bal)}` : `Pending ${fmt(bal)}`) : 'Cleared / Prepaid';
+        const status = bal > 0 ? (paid > 0 ? `Due Now: ${fmt(bal)}` : `Pending ${fmt(bal)}`) : 'Cleared / Prepaid';
         const statusClass = bal > 0 ? (paid > 0 ? 'bg-indigo-950/70 border-indigo-700 text-indigo-200' : 'bg-rose-950/70 border-rose-700 text-rose-200') : 'bg-emerald-950/70 border-emerald-700 text-emerald-200';
         tb.innerHTML += `
           <tr class="table-row-hover transition" onclick="openUniversalModal('${enc}')">
@@ -1589,25 +2074,20 @@
       try {
         const res = await fetch(`/api/kpis?${getOverviewParams()}`);
         const d = await res.json();
-        setElText('kpi-gross', fmt(d.total_booked_revenue));
-        setElText('kpi-collected', fmt(d.total_collected_revenue));
-        setElText('kpi-outstanding', fmt(d.total_outstanding_balance));
-        setElText('kpi-bookings-count', `${d.total_bookings || 0} bookings`);
-        const booked = parseFloat(d.total_booked_revenue || 0);
-        const collected = parseFloat(d.total_collected_revenue || 0);
-        setElText('kpi-collection-rate', `${booked > 0 ? ((collected / booked) * 100).toFixed(1) : 0}% settlement`);
-        setElText('kpi-unpaid-stats', `${d.unpaid_count || 0} unpaid / ${d.partially_paid_count || 0} partial`);
-        setElText('kpi-settled-count', d.fully_paid_count || 0);
+        setElText('kpi-at-risk-arrivals', d.at_risk_arrivals?.count || 0);
+        setElText('kpi-at-risk-value', `${fmt(d.at_risk_arrivals?.value)} due within 48 hours`);
+        setElText('kpi-post-departure-debt', fmt(d.post_departure_debt?.value));
+        setElText('kpi-post-departure-count', `${d.post_departure_debt?.count || 0} departed guests outstanding`);
+        setElText('kpi-settled-cash', fmt(d.settled_cash?.value));
         
-        loadCharts();
-        fetchReconciliation(0);
+        await Promise.all([loadCharts(), fetchReconciliation(0)]);
       } catch(e) {}
     }
 
     async function loadCharts() {
       try {
         const res = await fetch(`/api/reports/charts?${getOverviewParams()}`);
-        const { monthly, channels } = await res.json();
+        const { pace, channels } = await res.json();
         
         const mCanvas = document.getElementById('monthlyChart');
         if (mCanvas) {
@@ -1615,11 +2095,9 @@
           monthlyChartInstance = new Chart(mCanvas, {
             type: 'bar',
             data: {
-              labels: (monthly || []).map(m => m.check_in_month),
+              labels: (pace || []).map(m => m.period_start?.split('T')[0]),
               datasets: [
-                { label: 'Booked', data: (monthly || []).map(m => parseFloat(m.revenue || 0)), backgroundColor: '#3b82f6', borderRadius: 4 },
-                { label: 'Collected', data: (monthly || []).map(m => parseFloat(m.collected || 0)), backgroundColor: '#10b981', borderRadius: 4 },
-                { label: 'Unpaid', data: (monthly || []).map(m => parseFloat(m.unpaid || 0)), backgroundColor: '#f59e0b', borderRadius: 4 }
+                { label: 'OTB revenue', data: (pace || []).map(m => parseFloat(m.revenue || 0)), backgroundColor: '#38bdf8', borderRadius: 4 }
               ]
             },
             options: { responsive: true, maintainAspectRatio: false, scales: { x: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8', font: {size: 9} } }, y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8', font: {size: 9} } } }, plugins: { legend: { labels: { color: '#94a3b8', boxWidth: 10, font: {size: 10} } } } }
@@ -1630,12 +2108,12 @@
         if (cCanvas) {
           if (channelChartInstance) channelChartInstance.destroy();
           channelChartInstance = new Chart(cCanvas, {
-            type: 'bar',
+            type: 'doughnut',
             data: {
-              labels: (channels || []).map(c => c.channel || 'Direct'),
-              datasets: [{ data: (channels || []).map(c => parseFloat(c.revenue || 0)), backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'], borderRadius: 4 }]
+              labels: (channels || []).map(c => c.channel_group || 'Direct'),
+              datasets: [{ data: (channels || []).map(c => parseFloat(c.revenue || 0)), backgroundColor: ['#f97316', '#10b981'], borderWidth: 0 }]
             },
-            options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8', font: {size: 9} } }, y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8', font: {size: 9} } } } }
+            options: { responsive: true, maintainAspectRatio: false, cutout: '62%', plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', boxWidth: 10, font: {size: 10} } } } }
           });
         }
       } catch (err) {}
@@ -1643,34 +2121,27 @@
 
     async function fetchReconciliation(offset = 0) {
       currentOffset = offset;
-      const status = document.getElementById('filter-status')?.value || 'ALL';
-      const search = document.getElementById('filter-search')?.value || '';
-      const nameSort = document.getElementById('recon-name-sort')?.value || 'name_asc';
-      const hideZeroPaid = document.getElementById('recon-hide-zero-paid')?.checked ? 'true' : 'false';
-      const hideBlankNotes = document.getElementById('recon-hide-blank-notes')?.checked ? 'true' : 'false';
       try {
-        const res = await fetch(`/api/reports/reconciliation?limit=${limit}&offset=${currentOffset}&status=${status}&search=${encodeURIComponent(search)}&name_sort=${nameSort}&hide_zero_paid=${hideZeroPaid}&hide_blank_notes=${hideBlankNotes}&${getOverviewParams()}`);
+        const res = await fetch(`/api/reports/reconciliation?limit=${limit}&offset=${currentOffset}&${getOverviewParams()}`);
         const { total, data } = await res.json();
         const tb = document.getElementById('recon-tbody'); tb.innerHTML = '';
         data.forEach(r => {
           const enc = encodeBookingData(r);
-          let bc = 'bg-slate-800 text-slate-400 border-slate-700';
-          if(r.payment_status==='Fully Paid') bc='bg-emerald-950 text-emerald-400 border-emerald-800/60';
-          if(r.payment_status==='Partially Paid') bc='bg-amber-950 text-amber-400 border-amber-800/60';
-          if(r.payment_status==='Unpaid') bc='bg-rose-950 text-rose-400 border-rose-800/60';
+          const isRefund = r.exception_type === 'Refund due';
+          const bc = isRefund ? 'bg-sky-950 text-sky-300 border-sky-800/60' : r.exception_type === 'Cancellation penalty missed' ? 'bg-amber-950 text-amber-300 border-amber-800/60' : 'bg-rose-950 text-rose-300 border-rose-800/60';
           tb.innerHTML += `
             <tr class="table-row-hover transition" onclick="openUniversalModal('${enc}')">
               <td>${r.property_name||'-'}</td>
               <td class="font-mono text-emerald-400 font-semibold">${r.booking_reference}</td>
-              <td class="max-w-[150px] truncate" title="${r.notes||''}">${r.guest_name} <span class="text-[9px] text-slate-500">${r.notes?' - '+r.notes:''}</span></td>
-              <td class="text-[10px] text-slate-400">${r.check_in?.split('T')[0]}</td>
+              <td class="max-w-[150px] truncate" title="${r.notes||''}">${r.guest_name} ${depositBadge(r)}<span class="text-[9px] text-slate-500">${r.notes?' - '+r.notes:''}</span></td>
+              <td><span class="px-1.5 py-0.5 text-[9px] font-semibold rounded border ${bc}">${r.exception_type}</span></td>
+              <td class="text-[10px] text-slate-400">${r.check_out?.split('T')[0]}</td>
               <td class="text-right">${fmt(r.booked_amount)}</td>
               <td class="text-right text-emerald-400">${fmt(r.total_paid_amount)}</td>
-              <td class="text-right font-bold ${r.balance_due>0?'text-rose-400':'text-slate-400'}">${fmt(r.balance_due)}</td>
-              <td class="text-center"><span class="px-1.5 py-0.5 text-[9px] font-semibold rounded border ${bc}">${r.payment_status}</span></td>
+              <td class="text-right font-bold ${isRefund?'text-sky-300':'text-rose-400'}">${fmt(r.exposure)}</td>
             </tr>`;
         });
-        setElText('pagination-info', `Showing ${offset+1}-${Math.min(offset+limit, total)} of ${total}`);
+        setElText('pagination-info', total ? `Showing ${offset+1}-${Math.min(offset+limit, total)} of ${total}` : '0 exceptions');
       } catch(e) {}
     }
     function changePage(d) { fetchReconciliation(currentOffset + (d*limit)); }
@@ -1680,7 +2151,8 @@
     // ZOHO CLIQ & GLOBAL SEARCH
     // =======================================================================
     async function sendToZohoCliq() {
-      const property = document.getElementById('ops-property').value;
+      const selectedProperties = getSelectedOpsProperties();
+      const property = selectedProperties.length ? selectedProperties.join(',') : 'ALL';
       const date = document.getElementById('ops-date').value;
       if (!date) return alert('Select a date first.');
 
@@ -1698,7 +2170,8 @@
     }
 
     function copyCliqFormat() {
-      const hotel = document.getElementById('ops-property')?.value || 'Property Handover';
+      const selectedProperties = getSelectedOpsProperties();
+      const hotel = selectedProperties.includes('ALL') || !selectedProperties.length ? 'All Properties' : selectedProperties.join(' + ');
       const date = document.getElementById('ops-date')?.value || '';
       const text = `🏨 Daily Handover - ${hotel}\n📅 Date: ${date}`;
       navigator.clipboard.writeText(text).then(() => alert('✅ Copied!'));
@@ -1732,6 +2205,7 @@
                 <div class="font-bold text-white text-xs">${item.guest_name}</div>
                 <div class="text-slate-400 font-mono text-[9px] mt-0.5">${item.booking_reference}</div>
                 <div class="text-emerald-400 text-[9px] mt-0.5"><i class="fa-solid fa-hotel mr-1"></i>${item.property_name} - ${item.room_unit_name}</div>
+                ${depositBadge(item)}
               </div>
               <div class="text-right">
                 <div class="font-bold text-xs">${fmt(item.booked_amount)}</div>
@@ -1751,7 +2225,9 @@
 
       const date = document.getElementById('ops-date')?.value || 'report';
       const propSelect = document.getElementById('ops-property');
-      const property = customHotel ? customHotel.replace(/[^A-Za-z0-9_-]/g, '_') : (propSelect ? propSelect.value.replace(/[^A-Za-z0-9_-]/g, '_') : 'all');
+      const selectedProperties = getSelectedOpsProperties();
+      const propertyLabel = selectedProperties.includes('ALL') || !selectedProperties.length ? 'all' : selectedProperties.join('_');
+      const property = customHotel ? customHotel.replace(/[^A-Za-z0-9_-]/g, '_') : propertyLabel.replace(/[^A-Za-z0-9_-]/g, '_');
       const isLightTheme = document.documentElement.classList.contains('light-mode');
 
       const captureCopy = element.cloneNode(true);
@@ -1788,11 +2264,12 @@
       if (!date) return alert('Select a date first.');
       if (!globalPropertiesList || globalPropertiesList.length === 0) return alert('No properties.');
 
-      const originalSelectedHotel = document.getElementById('ops-property').value;
+      const propertySelect = document.getElementById('ops-property');
+      const originalSelectedHotels = Array.from(propertySelect.selectedOptions).map(option => option.value);
       try {
         for (let i = 0; i < globalPropertiesList.length; i++) {
           const hotel = globalPropertiesList[i];
-          document.getElementById('ops-property').value = hotel;
+          Array.from(propertySelect.options).forEach(option => { option.selected = option.value === hotel; });
           await fetchDailyOps();
           await new Promise(r => setTimeout(r, 600));
 
@@ -1807,7 +2284,7 @@
       } catch (err) {
         alert(`❌ Batch Error: ${err.message}`);
       } finally {
-        document.getElementById('ops-property').value = originalSelectedHotel;
+        Array.from(propertySelect.options).forEach(option => { option.selected = originalSelectedHotels.includes(option.value); });
         await fetchDailyOps();
       }
     }
