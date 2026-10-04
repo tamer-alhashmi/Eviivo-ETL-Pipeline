@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const csv = require('csv-parser');
 const pool = require('./db');
 
@@ -9,10 +10,9 @@ function parseSafeDate(dateStr) {
   const val = dateStr.trim();
   if (!val) return null;
 
-  // 1. ISO format (e.g. 2026-09-01 or 2025-09-18 09:35:06)
-  if (/^\d{4}-\d{2}-\d{2}/.test(val)) {
-    return val.split(' ')[0];
-  }
+  // 1. ISO format: keep only the source calendar date, never parse the time zone.
+  const isoMatch = val.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (isoMatch) return isoMatch[1];
 
   // 2. Slash format (e.g. 26/07/2025 19:31 or 01/09/2026)
   const slashMatch = val.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
@@ -34,15 +34,47 @@ function parseSafeDate(dateStr) {
   }
 
   const d = new Date(val);
-  return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
+  if (isNaN(d.getTime())) return null;
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function paymentDateKey(dateStr) {
+  const date = parseSafeDate(dateStr);
+  if (!date) return '';
+  return `${date.slice(8, 10)}${date.slice(5, 7)}${date.slice(0, 4)}`;
+}
+
+function parseEviivoTimestamp(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const match = raw.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?/);
+  if (match) {
+    const monthMap = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+    const year = Number(match[3]) < 100 ? 2000 + Number(match[3]) : Number(match[3]);
+    const date = new Date(year, monthMap[match[2].toLowerCase()], Number(match[1]), Number(match[4]), Number(match[5]), Number(match[6] || 0), Number(`0.${match[7] || 0}`) * 1000);
+    if (!Number.isNaN(date.getTime())) {
+      const pad = number => String(number).padStart(2, '0');
+      return `${year}-${pad(Number(match[2] ? monthMap[match[2].toLowerCase()] + 1 : date.getMonth() + 1))}-${pad(Number(match[1]))} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${String(date.getMilliseconds()).padStart(3, '0')}`;
+    }
+  }
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return null;
+  const pad = number => String(number).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${String(date.getMilliseconds()).padStart(3, '0')}`;
 }
 
 // --- Helper: تنظيف الأرقام والعملات (£129.00 -> 129.00) ---
 function parseSafeFloat(val) {
   if (val === undefined || val === null || val === '') return 0.0;
-  const cleaned = String(val).replace(/[^0-9.-]+/g, '');
+  const raw = String(val).trim();
+  const isParenthesizedNegative = /^\(.*\)$/.test(raw);
+  const cleaned = raw.replace(/[^0-9.-]+/g, '');
   const num = parseFloat(cleaned);
-  return isNaN(num) ? 0.0 : num;
+  if (isNaN(num)) return 0.0;
+  return isParenthesizedNegative ? -Math.abs(num) : num;
 }
 
 function parseSafeInt(val) {
@@ -68,11 +100,250 @@ async function ensureSourceColumns(client, tableName, headers, reserved) {
     used.add(name);
     mapping.push({ header, name });
   });
-  for (const item of mapping) await client.query(`ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS "${item.name}" TEXT`);
+  if (mapping.length) {
+    await client.query(`ALTER TABLE ${tableName} ${
+      mapping.map(item => `ADD COLUMN IF NOT EXISTS "${item.name}" TEXT`).join(', ')
+    }`);
+  }
   return mapping;
 }
 
 function valuesForSourceColumns(row, mapping) { return mapping.map(item => row[item.header] ?? null); }
+
+function paymentIdentityKey(paymentId, bookingReference, orderReference) {
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify([paymentId, bookingReference, orderReference]))
+    .digest('hex');
+}
+
+async function deactivatePriorPaymentRows(client, paymentIdentities) {
+  const uniqueIdentities = [...new Map(paymentIdentities.map(identity => [
+    `${identity.paymentId}\u0000${String(identity.propertyName || '').trim().toUpperCase()}`,
+    identity
+  ])).values()];
+  if (!uniqueIdentities.length) return;
+
+  await client.query(`
+    UPDATE payments
+    SET is_deleted = TRUE
+    FROM UNNEST($1::text[], $2::text[]) AS incoming(payment_id, property_name)
+    WHERE (
+        payments.payment_id::text = incoming.payment_id
+        OR payments.payment_id::text = incoming.payment_id || '-' || payments.booking_reference
+      )
+      AND UPPER(TRIM(COALESCE(payments.property_name, ''))) = UPPER(TRIM(incoming.property_name))
+      AND payments.is_deleted = FALSE;
+  `, [
+    uniqueIdentities.map(identity => String(identity.paymentId)),
+    uniqueIdentities.map(identity => String(identity.propertyName || ''))
+  ]);
+}
+
+function firstSourceValue(row, names) {
+  for (const name of names) {
+    if (row[name] !== undefined && row[name] !== null && String(row[name]).trim() !== '') return row[name];
+  }
+  return null;
+}
+
+function bookingFinancialsFromRow(row) {
+  const roomRevenue = parseSafeFloat(firstSourceValue(row, [
+    'Room/Unit Revenue', 'Room Unit Revenue', 'room_unit_revenue', 'Room Rate', 'room_rate'
+  ]));
+  const otherRevenue = parseSafeFloat(firstSourceValue(row, [
+    'Other Revenue', 'OtherRevenue', 'other_revenue'
+  ]));
+  const reportedRevenue = parseSafeFloat(firstSourceValue(row, [
+    'Total Revenue', 'Total Amount', 'total_revenue'
+  ]));
+  const paidAmount = parseSafeFloat(firstSourceValue(row, [
+    'Paid Amount', 'Payment', 'Paid', 'paid_amount'
+  ]));
+  const positiveOtherRevenue = Math.max(0, otherRevenue);
+  const roomRevenueBase = Math.max(
+    0,
+    roomRevenue || (reportedRevenue !== 0
+      ? reportedRevenue >= positiveOtherRevenue ? reportedRevenue - positiveOtherRevenue : reportedRevenue
+      : 0)
+  );
+  const reportedOtherRevenue = Math.min(
+    positiveOtherRevenue,
+    Math.max(0, reportedRevenue - roomRevenueBase)
+  );
+  const paidDeposit = Math.min(
+    positiveOtherRevenue,
+    Math.max(0, paidAmount - roomRevenueBase)
+  );
+  const totalRevenue = Math.max(
+    0,
+    roomRevenueBase,
+    reportedRevenue !== 0
+      ? reportedRevenue - reportedOtherRevenue + paidDeposit
+      : roomRevenueBase + paidDeposit
+  );
+
+  return {
+    roomRevenue,
+    otherRevenue,
+    totalRevenue,
+    paidAmount
+  };
+}
+
+function shouldImportBooking(bookingStatus, totalRevenue, paidAmount) {
+  const cancelled = /^cancell?ed$/i.test(String(bookingStatus || '').trim());
+  if (cancelled) return paidAmount > 0;
+  return totalRevenue !== 0 || paidAmount > 0;
+}
+
+function valueFromHeaders(row, headers, names, fallbackIndex) {
+  for (const name of names) {
+    const normalizedName = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const header = headers.find(candidate => String(candidate).toLowerCase().replace(/[^a-z0-9]/g, '') === normalizedName);
+    const value = header ? row[header] : undefined;
+    if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim();
+  }
+  const fallbackHeader = headers[fallbackIndex];
+  return fallbackHeader && row[fallbackHeader] !== undefined ? String(row[fallbackHeader]).trim() : '';
+}
+
+function paymentMethodFromRow(row, allHeaders = []) {
+  return valueFromHeaders(row, allHeaders, ['PaymentMethod', 'Payment Method'], 55);
+}
+
+function isOnAccountTransfer(row, allHeaders = []) {
+  const fields = [
+    paymentMethodFromRow(row, allHeaders),
+    valueFromHeaders(row, allHeaders, ['PaymentType', 'Payment Type', 'Type'], 52),
+    valueFromHeaders(row, allHeaders, ['PaymentType2', 'Payment Status'], 52)
+  ];
+  return fields.some(value => /^on\s+account(?:\b|$)/i.test(String(value || '').trim()));
+}
+
+function paymentAmountFromRow(row, allHeaders = []) {
+  const candidates = ['Direct1', 'Total Paid', 'SettledAmount', 'OTAPrepaid1', 'Amount'];
+  let firstValue;
+  for (const candidate of candidates) {
+    const value = valueFromHeaders(row, allHeaders, [candidate], -1);
+    if (!value) continue;
+    if (firstValue === undefined) firstValue = value;
+    const amount = parseSafeFloat(value);
+    if (amount !== 0) return amount;
+  }
+  if (firstValue !== undefined) return parseSafeFloat(firstValue);
+  return parseSafeFloat(valueFromHeaders(row, allHeaders, [], 72));
+}
+
+function findMasterPaymentRow(entries, allHeaders = []) {
+  return entries.find(entry => {
+    return paymentAmountFromRow(entry.row, allHeaders) !== 0
+      && !isOnAccountTransfer(entry.row, allHeaders);
+  });
+}
+
+function bookingRate(booking) {
+  const raw = booking?.raw_data && typeof booking.raw_data === 'object' ? booking.raw_data : {};
+  return bookingFinancialsFromRow({
+    ...raw,
+    'Total Revenue': firstSourceValue(raw, ['Total Revenue', 'Total Amount', 'total_revenue']) ?? booking?.total_revenue,
+    'Room/Unit Revenue': firstSourceValue(raw, [
+      'Room/Unit Revenue', 'Room Unit Revenue', 'room_unit_revenue', 'Room Rate', 'room_rate'
+    ]),
+    'Other Revenue': booking?.other_revenue ?? firstSourceValue(raw, ['Other Revenue', 'OtherRevenue', 'other_revenue']),
+    'Paid Amount': firstSourceValue(raw, ['Paid Amount', 'Payment', 'Paid', 'paid_amount']) ?? booking?.paid_amount
+  }).totalRevenue;
+}
+
+async function allocateGroupPayment(client, { orderReference, bookingReference, amount, groupBookings }) {
+  const normalizedOrderReference = String(orderReference || '').trim();
+  if (!normalizedOrderReference) return [];
+
+  let bookings = groupBookings;
+  if (!Array.isArray(bookings)) {
+    const result = await client.query(`
+    SELECT b.booking_reference, b.room_unit_name, b.total_revenue, b.other_revenue,
+           b.raw_data, b.id, b.booking_status, b.paid_amount,
+           COALESCE((
+             SELECT SUM(p.amount::numeric)
+             FROM payments p
+             WHERE p.booking_reference = b.booking_reference
+               AND p.is_deleted = FALSE
+               AND LOWER(TRIM(COALESCE(p.payment_status, ''))) !~ '(fail|declin|cancel|void|pending|reject|unpaid|error)'
+               AND LOWER(TRIM(COALESCE(p.payment_method, ''))) !~ '^on account'
+               AND LOWER(TRIM(COALESCE(p.payment_status, ''))) !~ '^on account'
+           ), 0) AS actual_paid_amount
+    FROM bookings b
+    WHERE UPPER(TRIM(COALESCE(b.order_reference, ''))) = UPPER($1)
+       OR UPPER(TRIM(COALESCE(b.raw_data->>'Group', ''))) = UPPER($1)
+    ORDER BY id
+    FOR UPDATE;
+  `, [normalizedOrderReference]);
+    bookings = result.rows || [];
+  }
+
+  const allocations = bookings
+    .filter(booking => shouldImportBooking(
+      booking.booking_status,
+      bookingRate(booking),
+      Math.max(parseSafeFloat(booking.paid_amount), parseSafeFloat(booking.actual_paid_amount))
+    ))
+    .map(booking => ({
+      bookingReference: booking.booking_reference,
+      roomId: booking.room_unit_name || booking.booking_reference,
+      amountBase: bookingRate(booking)
+    }))
+    .filter(allocation => allocation.bookingReference);
+
+  if (!allocations.length) return [];
+
+  const totalCents = Math.round(Number(amount) * 100);
+  if (!Number.isSafeInteger(totalCents)) {
+    throw new Error(`Group payment allocation failed: invalid payment amount for ${normalizedOrderReference}`);
+  }
+
+  const referencedBooking = bookings.find(booking =>
+    String(booking.booking_reference || '').trim().toUpperCase() === String(bookingReference || '').trim().toUpperCase()
+  );
+  if (referencedBooking) {
+    const expectedRevenue = bookingRate(referencedBooking);
+    const reportedPaid = parseSafeFloat(referencedBooking.paid_amount);
+    const tolerance = 0.01;
+    if (
+      expectedRevenue > 0
+      && Math.abs(reportedPaid - expectedRevenue) <= tolerance
+      && Math.abs(totalCents) / 100 <= expectedRevenue + tolerance
+    ) {
+      return [{
+        bookingReference: referencedBooking.booking_reference,
+        roomId: referencedBooking.room_unit_name || referencedBooking.booking_reference,
+        amount: totalCents / 100
+      }];
+    }
+  }
+
+  const absoluteCents = Math.abs(totalCents);
+  const totalBase = allocations.reduce((sum, item) => sum + Number(item.amountBase || 0), 0);
+  const weights = totalBase > 0
+    ? allocations.map(item => Number(item.amountBase || 0) / totalBase)
+    : allocations.map(() => 1 / allocations.length);
+  const shares = allocations.map((allocation, index) => {
+    const exactCents = absoluteCents * weights[index];
+    return { allocation, index, cents: Math.floor(exactCents), remainder: exactCents % 1 };
+  });
+  let remainingCents = absoluteCents - shares.reduce((sum, share) => sum + share.cents, 0);
+  [...shares]
+    .sort((left, right) => right.remainder - left.remainder || left.index - right.index)
+    .slice(0, remainingCents)
+    .forEach(share => { share.cents += 1; });
+
+  const sign = Math.sign(totalCents);
+  return shares.map(({ allocation, cents }) => ({
+    bookingReference: allocation.bookingReference,
+    roomId: allocation.roomId,
+    amount: sign * cents / 100
+  }));
+}
 
 // --- 1. استيراد الحجوزات (Bookings) ---
 async function importBookings(filePath, groupName) {
@@ -108,14 +379,25 @@ async function importBookings(filePath, groupName) {
 
             const orderRef = (row['Order Reference'] || '').trim();
             // عمود Property لاسم الفندق
-            const propertyName = (row['Property'] || groupName).trim();
+            let propertyName = (row['Property'] || groupName).trim();
 
             const guestFirstName = (row['Guest First Name'] || row['First Name'] || '').trim();
             const guestLastName = (row['Guest Last Name'] || row['Last Name'] || '').trim();
             const telephone = (row['Guest Phone 1'] || row['Guest Phone 2'] || row['Telephone'] || '').trim();
             const email = (row['Guest Email'] || row['Email'] || '').trim();
 
-            const roomUnitName = (row['Room/Unit Name'] || row['Room'] || '').trim();
+            let roomUnitName = (row['Room/Unit Name'] || row['Room'] || '').trim();
+            if (
+              propertyName.trim().toLowerCase() === 'savoy hotel' &&
+              /brichfield|birchfield|hirschfeld/i.test(roomUnitName)
+            ) {
+              propertyName = 'Birchfield Hotel';
+              roomUnitName = roomUnitName.replace(/\s*(?:brichfield|birchfield|hirschfeld)\s*/gi, ' ').trim();
+              console.log('TRANSFORMED:', roomUnitName, '->', propertyName);
+              if (Object.prototype.hasOwnProperty.call(row, 'Property')) row['Property'] = propertyName;
+              if (Object.prototype.hasOwnProperty.call(row, 'Room/Unit Name')) row['Room/Unit Name'] = roomUnitName;
+              if (Object.prototype.hasOwnProperty.call(row, 'Room')) row.Room = roomUnitName;
+            }
             const bookingStatus = (row['Booking Status'] || row['Status'] || 'Confirmed').trim();
             const channel = (row['Channel'] || row['Source'] || 'Direct').trim();
             const currency = (row['Currency'] || 'GBP').trim();
@@ -129,14 +411,8 @@ async function importBookings(filePath, groupName) {
             const adults = parseSafeInt(row['Adults']) || 1;
             const children = parseSafeInt(row['Children']) || 0;
 
-            const otherRevenue = parseSafeFloat(row['Other Revenue']);
-            const totalRevenue = parseSafeFloat(row['Total Revenue']);
-            const paidAmount = parseSafeFloat(row['Paid Amount']);
-
-            if (/^cancell?ed$/i.test(bookingStatus) && totalRevenue === 0 && paidAmount === 0) {
-              await client.query(`DELETE FROM bookings WHERE booking_reference = $1`, [bookingRef]);
-              continue;
-            }
+            const { otherRevenue, totalRevenue, paidAmount } = bookingFinancialsFromRow(row);
+            if (!shouldImportBooking(bookingStatus, totalRevenue, paidAmount)) continue;
 
             const query = `
               INSERT INTO bookings (
@@ -166,7 +442,12 @@ async function importBookings(filePath, groupName) {
                 telephone = EXCLUDED.telephone,
                 email = EXCLUDED.email,
                 room_unit_name = EXCLUDED.room_unit_name,
-                booking_status = EXCLUDED.booking_status,
+                -- IMMUTABLE: UNIVERSAL TERMINAL CANCELLED STATE
+                booking_status = CASE
+                  WHEN LOWER(TRIM(bookings.booking_status)) IN ('cancelled', 'canceled')
+                    THEN bookings.booking_status
+                  ELSE EXCLUDED.booking_status
+                END,
                 channel = EXCLUDED.channel,
                 currency = EXCLUDED.currency,
                 notes = EXCLUDED.notes,
@@ -230,68 +511,198 @@ async function importPayments(filePath, groupName) {
           await client.query('BEGIN');
           const allHeaders = Object.keys(rows[0] || {});
           const sourceHeaders = allHeaders.slice(38, 75);
-          const sourceMapping = await ensureSourceColumns(client, 'payments', sourceHeaders, new Set(['id', 'payment_id', 'booking_reference', 'order_reference', 'received_date_time', 'guest_name', 'business_name', 'room_name', 'channel', 'channel_reference', 'payment_type', 'payment_method', 'property_name', 'currency', 'payment_status', 'payment_date', 'amount', 'created_at', 'raw_data']));
+          const sourceMapping = await ensureSourceColumns(client, 'payments', sourceHeaders, new Set(['id', 'payment_id', 'unique_payment_key', 'booking_reference', 'order_reference', 'received_date_time', 'guest_name', 'business_name', 'room_name', 'channel', 'channel_reference', 'payment_type', 'payment_method', 'property_name', 'currency', 'payment_status', 'payment_date', 'amount', 'user_name', 'last_updated_date_time', 'is_deleted', 'created_at', 'raw_data']));
+          const paymentGroups = new Map();
+          rows.forEach((candidate, candidateIndex) => {
+            const candidateOrderRef = valueFromHeaders(candidate, allHeaders, [
+              'OrderReference', 'Order Reference', 'Order Ref.', 'GroupReference', 'Group Reference'
+            ], 43);
+            const candidatePaymentId = valueFromHeaders(candidate, allHeaders, ['PaymentID', 'Payment ID'], 37);
+            const groupKey = candidateOrderRef && candidatePaymentId
+              ? `${candidateOrderRef.toUpperCase()}\u0000${candidatePaymentId}`
+              : `__single_${candidateIndex}`;
+            if (!paymentGroups.has(groupKey)) paymentGroups.set(groupKey, []);
+            paymentGroups.get(groupKey).push({ row: candidate, rowIndex: candidateIndex });
+          });
 
-          for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
-            const row = rows[rowIndex];
-            // Payment Report positions: AU = index 46, BD = index 55, BW = index 74.
-            const bookingRef = String(row['BookingReference'] || row['Booking Reference'] || row[allHeaders[46]] || '').trim();
-            const orderRef = String(row['OrderReference'] || row['Order Ref.'] || '').trim();
-            const rawPaymentId = String(row['PaymentID'] || row['Payment ID'] || `PAYMENT-${bookingRef}-${rowIndex + 1}`).trim();
+          const importEntries = [];
+          for (const groupRows of paymentGroups.values()) {
+            const masterEntry = findMasterPaymentRow(groupRows, allHeaders);
+            if (!masterEntry) continue;
+            const row = masterEntry.row;
+            if (isOnAccountTransfer(row, allHeaders)) continue;
+            const bookingRef = valueFromHeaders(row, allHeaders, [
+              'BookingReference', 'Booking Reference', 'Booking Ref.'
+            ], 44);
+            const orderRef = valueFromHeaders(row, allHeaders, [
+              'OrderReference', 'Order Reference', 'Order Ref.', 'GroupReference', 'Group Reference'
+            ], 43);
+            const rawPaymentId = valueFromHeaders(row, allHeaders, ['PaymentID', 'Payment ID'], 37);
+            const rawRoomId = valueFromHeaders(row, allHeaders, ['RoomId', 'Room ID', 'Room'], 42);
+            const receivedDateValue = valueFromHeaders(row, allHeaders, [
+              'ReceivedDateTime', 'Payment Date', 'BookedDate'
+            ], 36);
+            if (!rawPaymentId || !bookingRef || !paymentDateKey(receivedDateValue)) continue;
 
-            // يجب وجود المعرفين معاً لتطبيق القيد المركب
-            if (!rawPaymentId || !bookingRef) continue;
+            const propertyName = String(row['business_name'] || row['Property'] || groupName).trim();
+            const amount = paymentAmountFromRow(row, allHeaders);
+            if (!Number.isFinite(amount) || amount === 0) continue;
 
-            // اسم الفندق من عمود business_name
-            const propertyName = (row['business_name'] || row['Property'] || groupName).trim();
-            
-            // قراءة القيمة من Direct1 أو Total Paid
-            const amount = parseSafeFloat(
-              row[allHeaders[74]] ||
-              row['Direct1'] || 
-              row['Total Paid'] || 
-              row['SettledAmount'] || 
-              row['OTAPrepaid1'] || 
-              row['Amount'] || 
-              0
-            );
+            const paymentDate = parseSafeDate(receivedDateValue);
+            importEntries.push({
+              row,
+              rawPaymentId,
+              bookingRef,
+              orderRef,
+              rawRoomId,
+              propertyName,
+              amount,
+              paymentDate,
+              paymentMethod: paymentMethodFromRow(row, allHeaders),
+              paymentStatus: valueFromHeaders(row, allHeaders, [
+                'PaymentType2', 'Payment Status', 'Type'
+              ], 52) || 'Success',
+              userName: String(row['UserName'] || row.User || '').trim() || 'Eviivo Import',
+              lastUpdatedDateTime: parseEviivoTimestamp(row['LastUpdatedDateTime'] || row.Updated) || paymentDate,
+              sourceData: JSON.stringify(Object.fromEntries(sourceHeaders.map(header => [header, row[header] ?? null]))),
+              sourceValues: valuesForSourceColumns(row, sourceMapping)
+            });
+          }
 
-            const currency = 'GBP';
-            const paymentMethod = String(row['PaymentMethod'] || row['Payment Method'] || row[allHeaders[55]] || '').trim();
-            const paymentStatus = (row['PaymentType2'] || row['Payment Status'] || 'Success').trim();
-            const paymentDate = parseSafeDate(row['ReceivedDateTime'] || row['Payment Date'] || row['BookedDate']);
+          const paymentIdentities = importEntries.map(entry => ({
+            paymentId: entry.rawPaymentId,
+            propertyName: entry.propertyName
+          }));
+          const orderReferences = [...new Set(importEntries
+            .map(entry => entry.orderRef.trim().toLowerCase())
+            .filter(Boolean))];
+          const groupBookingsByReference = new Map();
 
-            const query = `
-              INSERT INTO payments (
-                payment_id, booking_reference, order_reference, property_name,
-                amount, currency, payment_method, payment_status, payment_date, raw_data,
-                ${sourceMapping.map(item => `"${item.name}"`).join(', ')}
-              ) VALUES (
-                $1, $2, $3, $4,
-                $5, $6, $7, $8, $9, $10,
-                ${sourceMapping.map((_, index) => `$${11 + index}`).join(', ')}
-              )
-              ON CONFLICT (payment_id, booking_reference) DO UPDATE SET
-                order_reference = EXCLUDED.order_reference,
-                property_name = EXCLUDED.property_name,
-                amount = EXCLUDED.amount,
-                currency = EXCLUDED.currency,
-                payment_method = EXCLUDED.payment_method,
-                payment_status = EXCLUDED.payment_status,
-                payment_date = EXCLUDED.payment_date,
-                raw_data = EXCLUDED.raw_data,
-                ${sourceMapping.map(item => `"${item.name}" = EXCLUDED."${item.name}"`).join(', ')};
-            `;
+          if (orderReferences.length) {
+            const paymentIds = paymentIdentities.map(identity => identity.paymentId);
+            const propertyNames = paymentIdentities.map(identity => identity.propertyName);
+            const groupResult = await client.query(`
+              SELECT b.booking_reference, b.room_unit_name, b.total_revenue, b.other_revenue,
+                     b.raw_data, b.id, b.booking_status, b.paid_amount,
+                     b.order_reference, b.raw_data->>'Group' AS group_reference,
+                     COALESCE(paid.actual_paid_amount, 0) AS actual_paid_amount
+              FROM bookings b
+              LEFT JOIN (
+                SELECT p.booking_reference, SUM(p.amount::numeric) AS actual_paid_amount
+                FROM payments p
+                WHERE p.is_deleted = FALSE
+                  AND LOWER(TRIM(COALESCE(p.payment_status, ''))) !~ '(fail|declin|cancel|void|pending|reject|unpaid|error)'
+                  AND LOWER(TRIM(COALESCE(p.payment_method, ''))) !~ '^on account'
+                  AND LOWER(TRIM(COALESCE(p.payment_status, ''))) !~ '^on account'
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM UNNEST($2::text[], $3::text[]) AS replacing(payment_id, property_name)
+                    WHERE UPPER(TRIM(COALESCE(p.property_name, ''))) = UPPER(TRIM(replacing.property_name))
+                      AND (
+                        p.payment_id::text = replacing.payment_id
+                        OR p.payment_id::text = replacing.payment_id || '-' || p.booking_reference
+                      )
+                  )
+                GROUP BY p.booking_reference
+              ) paid ON paid.booking_reference = b.booking_reference
+              WHERE LOWER(TRIM(COALESCE(b.order_reference, ''))) = ANY($1::text[])
+                 OR LOWER(TRIM(COALESCE(b.raw_data->>'Group', ''))) = ANY($1::text[])
+              ORDER BY b.id
+              FOR UPDATE OF b;
+            `, [orderReferences, paymentIds, propertyNames]);
 
-            const params = [
-              rawPaymentId, bookingRef, orderRef, propertyName,
-              amount, currency, paymentMethod, paymentStatus, paymentDate,
-              JSON.stringify(Object.fromEntries(sourceHeaders.map(header => [header, row[header] ?? null]))),
-              ...valuesForSourceColumns(row, sourceMapping)
-            ];
+            for (const booking of groupResult.rows) {
+              const references = new Set([booking.order_reference, booking.group_reference]);
+              for (const reference of references) {
+                const key = String(reference || '').trim().toLowerCase();
+                if (!key) continue;
+                if (!groupBookingsByReference.has(key)) groupBookingsByReference.set(key, []);
+                groupBookingsByReference.get(key).push(booking);
+              }
+            }
+          }
 
-            await client.query(query, params);
-            insertedCount++;
+          const pendingPayments = new Map();
+          for (const entry of importEntries) {
+            const groupedAllocations = entry.orderRef
+              ? await allocateGroupPayment(client, {
+                orderReference: entry.orderRef,
+                bookingReference: entry.bookingRef,
+                amount: entry.amount,
+                groupBookings: groupBookingsByReference.get(entry.orderRef.trim().toLowerCase()) || []
+              })
+              : [];
+            const allocations = groupedAllocations.length
+              ? groupedAllocations
+              : [{ bookingReference: entry.bookingRef, roomId: entry.rawRoomId || entry.bookingRef, amount: entry.amount }];
+
+            for (const allocation of allocations) {
+              const allocationBookingReference = allocation.bookingReference || entry.bookingRef;
+              const payment = {
+                paymentId: entry.rawPaymentId,
+                uniquePaymentKey: paymentIdentityKey(entry.rawPaymentId, allocationBookingReference, entry.orderRef),
+                bookingReference: allocationBookingReference,
+                orderReference: entry.orderRef,
+                propertyName: entry.propertyName,
+                roomId: allocation.roomId || entry.rawRoomId || entry.bookingRef,
+                receivedDate: entry.paymentDate,
+                amount: allocation.amount,
+                currency: 'GBP',
+                paymentMethod: entry.paymentMethod,
+                paymentStatus: entry.paymentStatus,
+                paymentDate: entry.paymentDate,
+                userName: entry.userName,
+                lastUpdatedDateTime: entry.lastUpdatedDateTime,
+                rawData: entry.sourceData,
+                sourceValues: entry.sourceValues
+              };
+              pendingPayments.set(
+                `${payment.paymentId}\u0000${payment.bookingReference}`,
+                payment
+              );
+            }
+          }
+
+          await deactivatePriorPaymentRows(client, paymentIdentities);
+
+          const paymentColumns = [
+            'payment_id', 'unique_payment_key', 'booking_reference', 'order_reference', 'property_name',
+            'room_name', 'received_date_time', 'amount', 'currency', 'payment_method', 'payment_status',
+            'payment_date', 'user_name', 'is_deleted', 'last_updated_date_time', 'raw_data',
+            ...sourceMapping.map(item => `"${item.name}"`)
+          ];
+          const mutableColumns = [
+            'unique_payment_key', 'order_reference', 'property_name', 'room_name', 'received_date_time',
+            'amount', 'currency', 'payment_method', 'payment_status', 'payment_date', 'user_name',
+            'is_deleted', 'last_updated_date_time', 'raw_data',
+            ...sourceMapping.map(item => `"${item.name}"`)
+          ];
+          const paymentRows = [...pendingPayments.values()];
+          const maxRowsPerBatch = Math.max(1, Math.floor(50000 / paymentColumns.length));
+
+          for (let offset = 0; offset < paymentRows.length; offset += maxRowsPerBatch) {
+            const batch = paymentRows.slice(offset, offset + maxRowsPerBatch);
+            const values = [];
+            const placeholders = batch.map((payment, rowIndex) => {
+              const params = [
+                payment.paymentId, payment.uniquePaymentKey, payment.bookingReference, payment.orderReference,
+                payment.propertyName, payment.roomId, payment.receivedDate, payment.amount, payment.currency,
+                payment.paymentMethod, payment.paymentStatus, payment.paymentDate, payment.userName, false,
+                payment.lastUpdatedDateTime, payment.rawData, ...payment.sourceValues
+              ];
+              values.push(...params);
+              const first = rowIndex * paymentColumns.length + 1;
+              return `(${params.map((_, index) => `$${first + index}`).join(', ')})`;
+            });
+            const updateColumns = mutableColumns
+              .map(column => `${column} = EXCLUDED.${column}`)
+              .join(', ');
+            await client.query(`
+              INSERT INTO payments (${paymentColumns.join(', ')})
+              VALUES ${placeholders.join(', ')}
+              ON CONFLICT (payment_id, booking_reference) DO UPDATE SET ${updateColumns};
+            `, values);
+            insertedCount += batch.length;
           }
 
           await client.query('COMMIT');
@@ -349,4 +760,15 @@ if (require.main === module) {
   run();
 }
 
-module.exports = { importBookings, importPayments, run };
+module.exports = {
+  allocateGroupPayment,
+  bookingFinancialsFromRow,
+  deactivatePriorPaymentRows,
+  findMasterPaymentRow,
+  importBookings,
+  importPayments,
+  paymentIdentityKey,
+  paymentAmountFromRow,
+  run,
+  shouldImportBooking
+};
