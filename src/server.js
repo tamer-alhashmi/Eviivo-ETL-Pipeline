@@ -1212,6 +1212,21 @@ app.post('/api/reconciliation', async (req, res) => {
 // ============================================================================
 // [SECTION-04]: SMART GLOBAL SEARCH (HANDLES REVERSED NAMES)
 // ============================================================================
+app.get('/api/bookings', async (_req, res) => {
+  try {
+    const result = await pool.query(`
+      ${DISTRIBUTED_CTE}
+      SELECT ${sharedSelectSQL}
+      FROM distributed_bookings b
+      ORDER BY b.check_in DESC NULLS LAST, b.booking_reference ASC;
+    `);
+    res.json({ bookings: result.rows });
+  } catch (err) {
+    console.error('Booking list error:', err.message);
+    res.status(500).json({ error: 'Unable to load bookings.' });
+  }
+});
+
 app.get('/api/bookings/search', async (req, res) => {
   try {
     const searchString = String(req.query.q || '').trim();
